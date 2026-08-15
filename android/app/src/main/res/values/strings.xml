@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Kadr</string>
+
+    <string name="backup_channel_name">Backup progress</string>
+    <string name="backup_channel_description">Shows what Kadr is uploading while a batch runs.</string>
+    <string name="backup_starting">Preparing backup</string>
+    <string name="backup_scanning">Looking for new photos</string>
+    <string name="backup_hashing">Fingerprinting files</string>
+    <string name="backup_checking">Asking the server what it needs</string>
+    <string name="backup_uploading_count">Backing up %1$d of %2$d</string>
+    <string name="backup_action_stop">Stop</string>
+    <string name="backup_done_title">Backup finished</string>
+</resources>
