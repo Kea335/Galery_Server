@@ -1,0 +1,28 @@
+# TLS on the LAN via Caddy's internal CA (§13).
+#
+# Install the root certificate on the phone once:
+#   /var/lib/caddy/.local/share/caddy/pki/authorities/local/root.crt
+#
+# Give the server a static LAN IP or a DHCP reservation first — §4 assumes
+# wired Ethernet and a stable address.
+
+kadr.lan {
+	tls internal
+
+	# Uploads are chunked, but a 8 MB PATCH still needs headroom, and a large
+	# video download must not be cut off mid-stream.
+	request_body {
+		max_size 64MB
+	}
+
+	reverse_proxy 127.0.0.1:8787 {
+		# Range requests and long video streams — do not buffer them.
+		flush_interval -1
+
+		# A phone on weak Wi-Fi can take a while to push 8 MB.
+		transport http {
+			read_timeout 300s
+			write_timeout 300s
+		}
+	}
+}

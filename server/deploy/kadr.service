@@ -1,0 +1,47 @@
+[Unit]
+Description=Kadr — self-hosted photo & video backup
+Documentation=file:///opt/kadr/server/README.md
+After=network-online.target
+Wants=network-online.target
+# The media disk must be mounted before the blobs are touched.
+RequiresMountsFor=/srv/kadr
+
+[Service]
+Type=simple
+User=kadr
+Group=kadr
+WorkingDirectory=/opt/kadr/server
+ExecStart=/usr/bin/node src/index.js
+
+Environment=NODE_ENV=production
+Environment=KADR_DATA_DIR=/srv/kadr
+Environment=KADR_PORT=8787
+# Caddy terminates TLS and proxies in; nothing else should reach the API.
+Environment=KADR_HOST=127.0.0.1
+# 4 GB box: cap the heap so a runaway can never take the machine with it.
+# Upload chunks stream through Buffers outside the old space, so this is ample.
+Environment=NODE_OPTIONS=--max-old-space-size=256
+
+Restart=on-failure
+RestartSec=5s
+
+# The thumbnail worker already runs ffmpeg at nice 19; keep the whole service
+# polite so the two cores stay responsive to the API.
+Nice=5
+IOSchedulingClass=best-effort
+IOSchedulingPriority=6
+
+NoNewPrivileges=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+RestrictRealtime=true
+ReadWritePaths=/srv/kadr
+
+[Install]
+WantedBy=multi-user.target
