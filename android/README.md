@@ -1,0 +1,257 @@
+# Kadr Android
+
+Kotlin + Compose client.
+
+- **M2 is complete and verified on a device** (§14): MediaStore populates Room,
+  a debug screen lists the index, and a file uploads with its bytes intact.
+- **M3 is complete except one item**: the WorkManager loop, batched dedupe,
+  retries with jittered backoff and the foreground notification all work and are
+  tested. What is *not* yet working is a fully headless resume after a reboot —
+  see "Known gaps".
+- **M4 is complete**: one timeline merging local and server photos, month
+  dividers, a full-screen viewer with zoom, paging and drag-to-dismiss, and
+  shared-element transitions between them.
+- **M5 is written but not signed off**: the player, cache, authenticated data
+  source, gestures and grid preview are all in place, and the server half is
+  verified — but the emulator's software H.264 decoder cannot play anything
+  under ExoPlayer, so playback itself is unproven. See "Known gaps".
+
+---
+
+## Toolchain
+
+This project sits on a recent and slightly awkward set of versions, so the
+reasoning is worth writing down:
+
+| Piece | Version | Why this one |
+|---|---|---|
+| JDK | 25 (Android Studio's JBR) | The only JDK on the machine |
+| Gradle | 9.5.0 | JDK 25 needs Gradle 9.x |
+| AGP | 9.3.1 | Gradle 9 needs AGP 9 |
+| Kotlin | 2.4.10 | **AGP 9 applies Kotlin itself.** Kotlin 2.2.x fails with `ApplicationExtensionImpl cannot be cast to BaseExtension`; 2.4 knows how to attach |
+| KSP | 2.3.11 | KSP left the `<kotlin>-<ksp>` scheme at 2.3.0 and versions independently now |
+| compileSdk | 37 | AndroidX 1.19 / Compose 1.12 refuse to be consumed below it |
+| minSdk | 26 | Per §6 |
+
+**Do not add `org.jetbrains.kotlin.android` to the plugins block.** AGP 9 ships
+built-in Kotlin support and applying the JetBrains plugin on top is a hard
+error. The Compose and serialization compiler plugins still apply normally.
+
+## Build
+
+```bash
+./gradlew assembleDebug
+```
+
+The APK lands in `app/build/outputs/apk/debug/`. Debug builds carry
+`usesCleartextTraffic` so you can pair over plain HTTP before installing Caddy's
+certificate on the phone; release builds do not.
+
+## Layout
+
+```
+app/src/main/java/com/kadr/app/
+├── data/
+│   ├── local/     Room: LocalAsset, the §8 state machine, DAO
+│   ├── media/     MediaStoreScanner, Sha256Hasher
+│   ├── prefs/     SettingsStore (EncryptedSharedPreferences)
+│   ├── remote/    Retrofit API, DTOs, ChunkRequestBody, error mapping
+│   └── repo/      BackupRepository — scan and upload live here
+├── di/            Hilt modules
+└── ui/            Compose: pairing screen, debug index screen, theme
+```
+
+## What M2 actually does
+
+**Scan.** `MediaStoreScanner` walks images and video. The identity key is
+`(mediaStoreId, sizeBytes, dateModified)`; when the last two move, the file was
+edited, so the cached hash is dropped and the row restarts the state machine.
+Capture dates fall back EXIF → `dateTaken` → `dateModified` → now, exactly as
+§17 asks — which means a first scan opens one stream per image and is the slow
+part of the run.
+
+**Upload.** `BackupRepository.upload()` runs hash → `/assets/check` →
+`/uploads` → chunked `PATCH` → `/complete`. It resumes from whatever the server
+says it holds, and treats `RANGE_GAP` / `SESSION_RESET` as instructions rather
+than failures. `HASH_MISMATCH` clears the cached digest so the next attempt
+recomputes it.
+
+Chunks stream from the `content://` URI 64 KB at a time — a 4 GB video never
+lands in the heap.
+
+## Tests
+
+`BackupFlowTest` is the M2 acceptance test. It seeds its own images into
+MediaStore (never touching real photos), scans, uploads a file deliberately
+larger than one 4 MB chunk, then downloads it back and compares hashes.
+
+The emulator cannot reach the host on `10.0.2.2` behind Windows Firewall, so
+tunnel over adb first:
+
+```bash
+adb reverse tcp:8787 tcp:8787
+```
+
+Get a pairing code from the running server, then:
+
+```bash
+adb shell am instrument -w -e kadrServerUrl http://127.0.0.1:8787 -e kadrPairCode 123456 -e class com.kadr.app.BackupFlowTest com.kadr.app.debug.test/androidx.test.runner.AndroidJUnitRunner
+```
+
+`SeedMediaTest` is a fixture, not a test: it plants four demo images and leaves
+them, so the app can be driven by hand against something real.
+
+```bash
+adb shell am instrument -w -e class com.kadr.app.SeedMediaTest com.kadr.app.debug.test/androidx.test.runner.AndroidJUnitRunner
+```
+
+## The backup engine (M3)
+
+`BackupWorker` runs the loop from §10: scan → hash → one batched `/assets/check`
+for up to 500 hashes → chunked upload → complete. It runs as a foreground
+service so a batch survives the screen going off, and the notification carries
+the file name and transfer rate §10.6 asks for.
+
+Retries live at two levels. A chunk that fails transiently is retried three
+times with exponential backoff plus jitter; a file that fails outright has its
+`attemptCount` bumped and is retried on later runs until it hits six, after
+which it shows up in the UI with its error rather than disappearing.
+`RANGE_GAP` and `SESSION_RESET` are treated as instructions, not failures — the
+server is the authority on what it holds.
+
+Scheduling: a periodic job every six hours under the user's constraints, plus
+"Back up now" which is expedited and ignores them once (§10.5).
+
+### Verified on device
+
+`UploadFailureTest` covers §17's five cases against a scripted MockWebServer:
+connection dropped mid-chunk, server restart (session reset), hash mismatch,
+duplicate file, and a full disk. It also covers a range gap. All six pass.
+
+A full batch of 216 files was driven end to end, including a device reboot
+mid-run: Room came back with the right state, no duplicates were created, and
+once the app process was alive the queue drained to 216 verified.
+
+## The gallery (M4)
+
+`GalleryDao.observeTimeline()` is a UNION of the two tables: local rows first,
+then server rows whose hash no local file has. A photo on both sides appears
+once — the local copy wins because it loads from disk instantly. Server-only
+rows are the "freed up space" and "photos from the other phone" case.
+
+Delta sync pages `GET /assets?since=` until the server has nothing newer,
+keeping tombstones so a deletion propagates. It also fills in the `remoteId`
+values that §9's check endpoint cannot report, by matching hashes after a sync.
+
+Three bugs the device found, each worth knowing about:
+
+- **The grid key cannot be the hash.** A phone really does hold the same photo
+  twice, and two cells sharing a key is a hard crash in LazyGrid. Keys are built
+  from the row id.
+- **Stacked gesture detectors starve each other.** `detectTransformGestures`,
+  `detectTapGestures` and `detectVerticalDragGestures` each consume the initial
+  down, so whichever Compose reaches first wins and the rest never fire — the
+  symptom was a pager that would not page and a dismiss drag that registered as
+  a tap. The viewer now decides intent (zoom / pan / dismiss / page) in one
+  detector.
+- **`popBackStack()` is not idempotent.** Deciding "dismiss" on every pointer
+  event popped the timeline off too and left a blank screen. The decision now
+  happens on release, behind a one-shot guard.
+
+## Video (M5)
+
+`PlayerFactory` builds every player the same way: a `CacheDataSource` in front
+of `DefaultDataSource`, which handles `content://` locally and hands HTTP to the
+same OkHttp client the API uses — so a server clip arrives with the device
+token, since §13 serves no media without one. Nothing is transcoded anywhere;
+the phone's decoder does the work, which is exactly why the server is allowed to
+be a weak box.
+
+The cache is a `SimpleCache` with LRU eviction, 512 MB by default. Combined with
+the server's `Range` support it is what makes scrubbing backwards free.
+
+The player is released in `onStop` and rebuilt with the saved position on the
+way back, and a poster frame holds the screen until the decoder renders its
+first frame. Gestures follow the M4 lesson — one detector decides between tap,
+double-tap seek, horizontal scrub and vertical brightness/volume, because
+stacked detectors starve each other.
+
+Long-pressing a video cell in the grid plays it in place, muted, on a single
+shared player for the whole timeline.
+
+### Test video
+
+`TestMedia.seedVideo()` encodes a real H.264 MP4 on the device with
+MediaCodec + MediaMuxer, because the emulator ships no video and the dev machine
+has no ffmpeg. Two things about that encoder are worth remembering: the frame
+size passed to `queueInputBuffer` must be the input buffer's capacity, not
+`width * height * 3 / 2` — rows are padded to the codec's alignment and the
+smaller number truncates every frame; and chroma has to be written sample by
+sample, because on a semi-planar layout a bulk row write stamps zeros over the
+neighbouring plane.
+
+## Polish (M6)
+
+Three screens landed: **Backup status** (queue, failures with their errors and a
+retry, storage used, server free space), **Settings** (network and battery
+rules, skipped folders, cache, theme) and **Trash**.
+
+Trash needed a server endpoint of its own — §9 defines delete and restore but no
+way to list, and delta sync only carries tombstones, which are an id and a
+timestamp. `GET /assets/trash` returns names, sizes and how long each item has
+before the reaper takes it, so the screen can show a countdown instead of a
+delete button. Nothing here destroys anything by hand: §2 says never lose a
+file, and a countdown honours that better than a button does.
+
+**Free up space** (§10.7) is the most dangerous code in the app, so it is the
+most defensive. A row marked VERIFIED is treated as a memory, not a promise: the
+server is asked again, right then, whether it still holds those exact hashes,
+and anything it cannot vouch for is left alone and reported as withheld. Then
+Android's own delete dialog asks the user. Afterwards only rows whose file has
+genuinely gone are marked freed — if the user unticked something in the system
+dialog, its row stays VERIFIED. `FreeUpSpaceTest` pins all three behaviours.
+
+Haptics, Material You as an opt-in, reduce-motion support (`kadrSpring()`
+collapses to a cut when the user has asked for less motion) and 48 dp minimum
+touch targets are in `ui/Haptics.kt` and `ui/theme/Theme.kt`.
+
+## Known gaps
+
+- **Video playback is unproven on the emulator.** `c2.goldfish.h264.decoder`
+  fails under ExoPlayer for both local and remote clips, with or without a
+  surface attached. The clip itself is fine — `MediaMetadataRetriever` decodes a
+  frame from it, the scanner reads 640×480 and the right duration — and the
+  server half is verified: an authenticated `Range` request for the middle of an
+  uploaded clip returns `206` with the exact byte count. What is left is
+  playback on a real hardware decoder. §14 M5 is therefore **not signed off**.
+- **A reboot does not yet resume the batch on its own.** `BootReceiver` fires
+  and successfully enqueues the resume request (log-confirmed), and the periodic
+  job survives the reboot with its constraints satisfied — but on the emulator
+  the one-off resume never reaches JobScheduler, and nothing uploads until the
+  app is opened. Three real bugs were fixed chasing this (a missing `goAsync()`
+  so the enqueue was lost with the receiver's process, an `IllegalArgumentException`
+  from putting a battery constraint on expedited work, and `ExistingWorkPolicy.KEEP`
+  silently swallowing every later request); the remaining cause is not yet
+  identified. §14's "survives a reboot mid-batch" is therefore **not signed off**.
+  Worth retrying on a physical device before digging further.
+- **`androidx.security.crypto` is deprecated.** `EncryptedSharedPreferences` and
+  `MasterKey` both emit deprecation warnings. It still works and §6 specifies
+  it, but token storage needs a decision before v1 — most likely a small
+  Keystore-backed wrapper of our own.
+- The Settings screen does not exist, so the excluded-folder list is only
+  configurable through `SettingsStore` (defaults: `.thumbnails`, `WhatsApp`,
+  `Screenshots`). The network and battery toggles are on the debug screen.
+- **Not verified by automation**: pinch-to-zoom between 2/3/5 columns and the
+  shared-element animation itself. `adb shell input` cannot send multi-touch,
+  and a transition is not something a screenshot proves. Both are wired and
+  crash-free; they need a human with a device to sign off.
+- The timeline loads the whole library into one list. That is fine at the few
+  hundred assets tested and should hold to a few thousand, but §15's "cold start
+  under 800 ms" at 10,000 assets wants Paging 3. The DAO is shaped so swapping
+  `Flow<List<…>>` for a `PagingSource` is a local change.
+- §12's right-edge fast scrubber and selection mode are still not built. They
+  are the two timeline details M6 did not reach; free-up-space works as a bulk
+  action instead of a per-photo selection.
+- Server-side thumbnails need `ffmpeg` on the server. Without it `/thumb`
+  answers 503 and server-only photos show an empty cell — local photos are
+  unaffected because they render straight from the `content://` URI.
