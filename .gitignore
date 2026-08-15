@@ -1,0 +1,24 @@
+node_modules/
+*.log
+.env
+
+# Server runtime state and test scratch. These are anchored with a leading
+# slash on purpose: a bare `data/` would also swallow the Android source
+# package com/kadr/app/data/.
+/server/data/
+/server/.e2e-tmp/
+/server/.restart-tmp/
+/server/.restart-data/
+/server/.mem-tmp/
+
+# Android
+.gradle/
+build/
+local.properties
+*.apk
+*.keystore
+
+/server/.soak-data/
+/server/.soak-tmp/
+/server/.hardening-data/
+/server/.hardening-tmp/
