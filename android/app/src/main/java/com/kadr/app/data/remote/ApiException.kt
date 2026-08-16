@@ -13,7 +13,12 @@ class ApiException(
     val httpStatus: Int,
     override val message: String,
     val receivedBytes: Long? = null,
+    val freeBytes: Long? = null,
+    val requiredBytes: Long? = null,
 ) : IOException(message) {
+
+    /** The server has no room left. Not a fault — an ending (§16). */
+    val isDiskFull: Boolean get() = code == "DISK_FULL"
 
     /** The server told us where it actually is; resync and continue. */
     val isRecoverable: Boolean
@@ -71,5 +76,7 @@ private fun HttpException.toApiException(json: Json): ApiException {
         httpStatus = status,
         message = parsed?.message?.takeIf { it.isNotBlank() } ?: (message() ?: "HTTP $status"),
         receivedBytes = parsed?.receivedBytes,
+        freeBytes = parsed?.freeBytes,
+        requiredBytes = parsed?.requiredBytes,
     )
 }

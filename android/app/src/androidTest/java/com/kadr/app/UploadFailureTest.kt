@@ -234,13 +234,53 @@ class UploadFailureTest {
         val result = repository.upload(assetId)
 
         assertTrue(result.isFailure)
+        assertEquals("A full disk is not worth retrying", 1, script.patchCount)
+
         val asset = requireNotNull(database.assets().findById(assetId))
-        assertEquals(AssetState.FAILED, asset.state)
         assertTrue(
             "The user must be told the disk is full, got: ${asset.lastError}",
             asset.lastError?.contains("disk", ignoreCase = true) == true,
         )
-        assertEquals("A full disk is not worth retrying", 1, script.patchCount)
+
+        // §16: a full server is an ending, not this photo's fault. Burning one
+        // of its six attempts would strand it FAILED after a few runs against a
+        // full disk, even once room is made.
+        assertEquals("The row must stay ready to send", AssetState.CHECKED, asset.state)
+        assertEquals("A full disk must not cost the file an attempt", 0, asset.attemptCount)
+        assertTrue(
+            "The file has to still be queued once there is room",
+            database.assets()
+                .pendingBatch(BackupRepository.MAX_ATTEMPTS, limit = 10)
+                .any { it.id == assetId },
+        )
+    }
+
+    @Test
+    fun g_a_full_server_is_refused_up_front_and_says_how_much_room_is_left() = runBlocking {
+        // The real server checks free space when the session is opened, before
+        // a single byte is sent (server/src/routes/uploads.js).
+        script.sessionOverride = errorResponse(
+            507,
+            "DISK_FULL",
+            "The server has run out of disk space.",
+            extraFields = ""","freeBytes":1048576,"requiredBytes":4194304""",
+        )
+
+        val result = repository.upload(assetId)
+
+        assertTrue(result.isFailure)
+        assertEquals("Nothing should be sent to a server with no room", 0, script.patchCount)
+
+        val full = requireNotNull(repository.serverFull.value) {
+            "The timeline banner has nothing to show without this"
+        }
+        assertEquals(1_048_576L, full.freeBytes)
+        assertEquals(4_194_304L, full.requiredBytes)
+        assertEquals(
+            "The row must stay ready to send",
+            AssetState.CHECKED,
+            requireNotNull(database.assets().findById(assetId)).state,
+        )
     }
 
     private fun errorResponse(
@@ -248,8 +288,9 @@ class UploadFailureTest {
         errorCode: String,
         message: String,
         receivedBytes: Long? = null,
+        extraFields: String = "",
     ): MockResponse {
-        val extra = receivedBytes?.let { ""","receivedBytes":$it""" } ?: ""
+        val extra = (receivedBytes?.let { ""","receivedBytes":$it""" } ?: "") + extraFields
         return MockResponse()
             .setResponseCode(code)
             .setHeader("Content-Type", "application/json")
@@ -266,6 +307,9 @@ private class KadrScript(private val sha: String, private val fileSize: Long) : 
     var duplicateAssetId: String? = null
     var assetId = "asset-ok"
     var completeOverride: MockResponse? = null
+
+    /** Refuses to open a session at all — a full disk, caught before any bytes. */
+    var sessionOverride: MockResponse? = null
 
     /** Applies to every chunk, for conditions that do not clear up. */
     var chunkAlways: MockResponse? = null
@@ -293,7 +337,7 @@ private class KadrScript(private val sha: String, private val fileSize: Long) : 
             )
 
             request.method == "POST" && path.endsWith("/api/v1/uploads") ->
-                duplicateAssetId?.let {
+                sessionOverride ?: duplicateAssetId?.let {
                     json(200, """{"data":{"alreadyExists":true,"assetId":"$it"}}""")
                 } ?: json(201, """{"data":{"uploadId":"upload-1","receivedBytes":0}}""")
 

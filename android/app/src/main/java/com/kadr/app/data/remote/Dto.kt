@@ -15,6 +15,9 @@ data class ApiErrorBody(
     val message: String = "",
     /** Present on RANGE_GAP, SESSION_RESET, HASH_MISMATCH and INCOMPLETE. */
     val receivedBytes: Long? = null,
+    /** Present on DISK_FULL, so the app can say how much room is left. */
+    val freeBytes: Long? = null,
+    val requiredBytes: Long? = null,
 )
 
 @Serializable

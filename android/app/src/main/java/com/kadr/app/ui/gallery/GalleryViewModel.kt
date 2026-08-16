@@ -12,6 +12,7 @@ import com.kadr.app.data.prefs.SettingsStore
 import com.kadr.app.data.repo.BackupProgress
 import com.kadr.app.data.repo.BackupRepository
 import com.kadr.app.data.repo.LibraryRepository
+import com.kadr.app.data.repo.ServerFull
 import com.kadr.app.data.video.PlayerFactory
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -57,6 +58,7 @@ class GalleryViewModel @Inject constructor(
     val syncing: StateFlow<Boolean> = library.syncing
     val backingUp: StateFlow<Boolean> = backup.running
     val progress: StateFlow<BackupProgress?> = backup.progress
+    val serverFull: StateFlow<ServerFull?> = backup.serverFull
 
     private val _message = MutableStateFlow<String?>(null)
     val message: StateFlow<String?> = _message.asStateFlow()

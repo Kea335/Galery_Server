@@ -119,6 +119,14 @@ which it shows up in the UI with its error rather than disappearing.
 `RANGE_GAP` and `SESSION_RESET` are treated as instructions, not failures — the
 server is the authority on what it holds.
 
+`DISK_FULL` is neither. §16 makes the library "whatever fits on the disk", so a
+full server is an ordinary ending: the run stops at the first refusal instead of
+failing every remaining file, and the row is parked at `CHECKED` without
+spending an attempt — otherwise a few runs against a full disk would strand the
+photo at six attempts even after room is made. The timeline shows one line
+across the top with the free space the server reported, and it clears itself the
+moment a file uploads again.
+
 Scheduling: a periodic job every six hours under the user's constraints, plus
 "Back up now" which is expedited and ignores them once (§10.5).
 
@@ -126,7 +134,9 @@ Scheduling: a periodic job every six hours under the user's constraints, plus
 
 `UploadFailureTest` covers §17's five cases against a scripted MockWebServer:
 connection dropped mid-chunk, server restart (session reset), hash mismatch,
-duplicate file, and a full disk. It also covers a range gap. All six pass.
+duplicate file, and a full disk — twice for the last one, since the server can
+refuse either when the session is opened or mid-chunk. It also covers a range
+gap. All seven pass.
 
 A full batch of 216 files was driven end to end, including a device reboot
 mid-run: Room came back with the right state, no duplicates were created, and

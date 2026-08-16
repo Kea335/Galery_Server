@@ -75,6 +75,15 @@ class BackupWorker @AssistedInject constructor(
     }
 
     private fun finish(outcome: BackupOutcome): Result {
+        // A full server is not something retrying fixes, and hammering it would
+        // just burn battery. Say so and stop until the owner makes room.
+        if (outcome.serverFull) {
+            notifications.completionNotification(
+                "The server is out of space — ${outcome.remaining} files are waiting.",
+            )
+            return Result.success()
+        }
+
         if (outcome.stoppedEarly) {
             Log.i(TAG, "backup stopped early with ${outcome.remaining} left")
             return Result.success()

@@ -62,9 +62,21 @@ data class BackupOutcome(
     val failed: Int,
     val remaining: Int,
     val stoppedEarly: Boolean,
+    /** Set when the server ran out of room; see [BackupRepository.serverFull]. */
+    val serverFull: Boolean = false,
 ) {
     val didWork: Boolean get() = uploaded > 0 || deduped > 0 || skipped > 0
 }
+
+/**
+ * The library is only as big as the disk behind it (§16: "whatever fits in
+ * 50 GB"), so a full server is an ordinary ending rather than a fault. It
+ * deserves one clear sentence, not a hundred failed files.
+ */
+data class ServerFull(
+    val freeBytes: Long?,
+    val requiredBytes: Long?,
+)
 
 @Singleton
 class BackupRepository @Inject constructor(
@@ -88,6 +100,10 @@ class BackupRepository @Inject constructor(
 
     private val _running = MutableStateFlow(false)
     val running: StateFlow<Boolean> = _running.asStateFlow()
+
+    /** Non-null once the server has said it is out of room, until it is not. */
+    private val _serverFull = MutableStateFlow<ServerFull?>(null)
+    val serverFull: StateFlow<ServerFull?> = _serverFull.asStateFlow()
 
     // The periodic worker and a "back up now" tap can land at the same moment.
     // Only one loop may own the queue.
@@ -236,12 +252,13 @@ class BackupRepository @Inject constructor(
                 var deduped = 0
                 var skipped = 0
                 var failed = 0
+                var diskFull = false
                 val attempted = mutableSetOf<Long>()
 
                 batchDone = 0
                 batchTotal = dao.pendingCount(MAX_ATTEMPTS)
 
-                while (!isStopped()) {
+                while (!isStopped() && !diskFull) {
                     val batch = dao.pendingBatch(MAX_ATTEMPTS, CHECK_BATCH_SIZE)
                         .filter { it.id !in attempted }
                     if (batch.isEmpty()) break
@@ -303,6 +320,16 @@ class BackupRepository @Inject constructor(
                         } catch (e: CancellationException) {
                             throw e
                         } catch (e: Exception) {
+                            // No room left means every file after this one
+                            // fails too. Stop, and say it once. This file is
+                            // not counted as failed — it is waiting, and
+                            // `remaining` already says so.
+                            if (e is ApiException && e.isDiskFull) {
+                                Log.w(TAG, "server is out of room: ${e.message}")
+                                diskFull = true
+                                break
+                            }
+
                             failed++
                             batchDone++
                         }
@@ -315,7 +342,8 @@ class BackupRepository @Inject constructor(
                     skipped = skipped,
                     failed = failed,
                     remaining = dao.pendingCount(MAX_ATTEMPTS),
-                    stoppedEarly = isStopped(),
+                    stoppedEarly = isStopped() || diskFull,
+                    serverFull = diskFull,
                 )
             }.also {
                 _progress.value = null
@@ -369,7 +397,8 @@ class BackupRepository @Inject constructor(
      * Hash → check → session → chunks → complete, for one file.
      *
      * Marks the row FAILED and rethrows on error, so the caller can count it
-     * without having to interpret the exception itself.
+     * without having to interpret the exception itself. A full server is the one
+     * exception — it parks the row instead of failing it.
      */
     private suspend fun uploadInternal(input: LocalAsset, alreadyChecked: Boolean = false): String {
         var asset = input
@@ -472,14 +501,30 @@ class BackupRepository @Inject constructor(
                 lastError = null,
             )
             dao.update(asset)
+            // Bytes landed, so whatever the server said last time about being
+            // full is no longer true.
+            _serverFull.value = null
             return completed.assetId
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
+            val apiError = e as? ApiException
+
+            // A full server is not this file's fault. Spending one of its six
+            // attempts would mean that after a few runs against a full disk the
+            // photo is stuck FAILED even once room is made — so the row is left
+            // ready to go and only the reason is recorded. Done here rather than
+            // in the batch loop so a single-file upload raises the flag too.
+            if (apiError?.isDiskFull == true) {
+                _serverFull.value = ServerFull(apiError.freeBytes, apiError.requiredBytes)
+                dao.update(asset.copy(state = AssetState.CHECKED, lastError = e.message))
+                Log.w(TAG, "no room for ${asset.filename}: ${e.message}")
+                throw e
+            }
+
             // A hash mismatch means our cached digest describes bytes that are no
             // longer on disk, so drop it and let the next attempt recompute.
-            val staleHash = (e as? ApiException)?.code == "HASH_MISMATCH"
-            dao.update(asset.markFailed(e, clearHash = staleHash))
+            dao.update(asset.markFailed(e, clearHash = apiError?.code == "HASH_MISMATCH"))
             Log.e(TAG, "upload failed for ${asset.filename}", e)
             throw e
         }

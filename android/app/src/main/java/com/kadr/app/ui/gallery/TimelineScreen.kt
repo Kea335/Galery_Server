@@ -9,6 +9,7 @@ import androidx.compose.animation.core.spring
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.calculateZoom
@@ -74,6 +75,8 @@ import androidx.media3.ui.AspectRatioFrameLayout
 import androidx.media3.ui.PlayerView
 import coil3.compose.AsyncImage
 import com.kadr.app.data.local.GalleryItem
+import com.kadr.app.data.repo.ServerFull
+import com.kadr.app.ui.formatBytes
 import com.kadr.app.ui.formatDuration
 import com.kadr.app.ui.rememberHaptics
 import com.kadr.app.ui.theme.KadrAmber
@@ -99,6 +102,7 @@ fun SharedTransitionScope.TimelineScreen(
     val backingUp by viewModel.backingUp.collectAsStateWithLifecycle()
     val progress by viewModel.progress.collectAsStateWithLifecycle()
     val message by viewModel.message.collectAsStateWithLifecycle()
+    val serverFull by viewModel.serverFull.collectAsStateWithLifecycle()
 
     val gridState = rememberLazyGridState()
     val snackbarHostState = remember { SnackbarHostState() }
@@ -235,6 +239,7 @@ fun SharedTransitionScope.TimelineScreen(
                 syncing = syncing,
                 backingUp = backingUp,
                 backupFraction = progress?.overallFraction,
+                serverFull = serverFull,
                 onOpenBackup = onOpenBackup,
                 modifier = Modifier.onSizeChanged { chromeHeight = it.height },
             )
@@ -277,6 +282,7 @@ private fun TopChrome(
     syncing: Boolean,
     backingUp: Boolean,
     backupFraction: Float?,
+    serverFull: ServerFull?,
     onOpenBackup: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -315,6 +321,40 @@ private fun TopChrome(
                     contentDescription = "Backup status",
                     tint = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
+            }
+        }
+
+        // §16 made the library "whatever fits on the disk", so running out is a
+        // normal ending. One line that says it, not a hundred failed files.
+        serverFull?.let { full ->
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(MaterialTheme.colorScheme.errorContainer)
+                    .clickable(onClick = onOpenBackup)
+                    .padding(horizontal = 20.dp, vertical = 10.dp),
+            ) {
+                Icon(
+                    imageVector = Icons.Default.CloudOff,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onErrorContainer,
+                    modifier = Modifier.size(18.dp),
+                )
+                Column {
+                    Text(
+                        text = "The server is out of space",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onErrorContainer,
+                    )
+                    Text(
+                        text = full.freeBytes?.let { "${formatBytes(it)} left — free some up or add a disk" }
+                            ?: "Free some up or add a disk",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onErrorContainer,
+                    )
+                }
             }
         }
 
