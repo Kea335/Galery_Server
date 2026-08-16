@@ -2,8 +2,6 @@ package com.kadr.app.data.prefs
 
 import android.content.Context
 import android.content.SharedPreferences
-import androidx.security.crypto.EncryptedSharedPreferences
-import androidx.security.crypto.MasterKey
 import com.kadr.app.data.media.MediaStoreScanner
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -39,28 +37,26 @@ data class KadrSettings(
 }
 
 /**
- * The device token is a bearer credential for the whole library, so it lives in
- * EncryptedSharedPreferences behind a Keystore-backed master key (§6, §13).
+ * The device token is a bearer credential for the whole library, so it is
+ * encrypted under a Keystore key that never leaves the secure hardware (§6,
+ * §13). Everything else here — the server address, the battery rules, a cursor —
+ * is not a secret and is stored as it reads.
  *
- * Note: androidx.security.crypto is deprecated upstream. It still works, but
- * token storage needs a replacement before v1 — see android/README.md.
+ * Encrypting only the secret is the difference from the old
+ * `EncryptedSharedPreferences`, which is deprecated upstream: see
+ * [KeystoreCipher] for the replacement and [migrateLegacyPrefs] for the one-time
+ * move of installs that predate it.
  */
 @Singleton
 class SettingsStore @Inject constructor(
     @param:ApplicationContext private val context: Context,
 ) {
-    private val prefs: SharedPreferences by lazy {
-        val masterKey = MasterKey.Builder(context)
-            .setKeyScheme(MasterKey.KeyScheme.AES256_GCM)
-            .build()
+    private val cipher = KeystoreCipher(TOKEN_KEY_ALIAS)
 
-        EncryptedSharedPreferences.create(
-            context,
-            "kadr_secure_prefs",
-            masterKey,
-            EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
-            EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM,
-        )
+    private val prefs: SharedPreferences by lazy {
+        context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).also {
+            migrateLegacyPrefs(context, it, cipher, KEY_TOKEN)
+        }
     }
 
     private val _settings = MutableStateFlow(read())
@@ -71,7 +67,7 @@ class SettingsStore @Inject constructor(
     private fun read() = KadrSettings(
         serverUrl = prefs.getString(KEY_SERVER_URL, "").orEmpty(),
         deviceId = prefs.getString(KEY_DEVICE_ID, "").orEmpty(),
-        token = prefs.getString(KEY_TOKEN, "").orEmpty(),
+        token = prefs.getString(KEY_TOKEN, null)?.let(cipher::decrypt).orEmpty(),
         excludedFolders = prefs.getStringSet(KEY_EXCLUDED, null)
             ?: MediaStoreScanner.DEFAULT_EXCLUDED_FOLDERS,
         autoBackup = prefs.getBoolean(KEY_AUTO_BACKUP, true),
@@ -89,7 +85,7 @@ class SettingsStore @Inject constructor(
     fun savePairing(serverUrl: String, deviceId: String, token: String) = edit {
         putString(KEY_SERVER_URL, serverUrl.trim())
         putString(KEY_DEVICE_ID, deviceId)
-        putString(KEY_TOKEN, token)
+        if (token.isBlank()) remove(KEY_TOKEN) else putString(KEY_TOKEN, cipher.encrypt(token))
     }
 
     fun saveExcludedFolders(folders: Set<String>) = edit { putStringSet(KEY_EXCLUDED, folders) }
@@ -115,10 +111,16 @@ class SettingsStore @Inject constructor(
      * field. The sync cursor goes too — a different server, or the same one
      * after a restore, must be re-read from the beginning.
      */
-    fun clearPairing() = edit {
-        remove(KEY_DEVICE_ID)
-        remove(KEY_TOKEN)
-        remove(KEY_LIBRARY_SINCE)
+    fun clearPairing() {
+        edit {
+            remove(KEY_DEVICE_ID)
+            remove(KEY_TOKEN)
+            remove(KEY_LIBRARY_SINCE)
+        }
+        // Throwing the key away as well means a stray copy of the old ciphertext
+        // — a backup taken by some other tool, an undeleted disk page — cannot be
+        // turned back into a working token by anyone.
+        cipher.forget()
     }
 
     private inline fun edit(block: SharedPreferences.Editor.() -> Unit) {
@@ -127,6 +129,11 @@ class SettingsStore @Inject constructor(
     }
 
     private companion object {
+        const val PREFS_NAME = "kadr_prefs"
+
+        /** The Keystore alias holding the AES key that wraps the token. */
+        const val TOKEN_KEY_ALIAS = "kadr_token_key"
+
         const val KEY_SERVER_URL = "server_url"
         const val KEY_DEVICE_ID = "device_id"
         const val KEY_TOKEN = "token"

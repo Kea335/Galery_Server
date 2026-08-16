@@ -33,7 +33,11 @@ galery app/
 - On device: MediaStore scan populates Room, re-scanning adds nothing, a 5 MB
   file uploads in chunks, and the bytes downloaded back hash identically.
 - §17's five failure cases pass against a scripted server: connection dropped
-  mid-chunk, server restart, hash mismatch, duplicate file, full disk.
+  mid-chunk, server restart, hash mismatch, duplicate file, full disk. A full
+  server stops the run instead of failing every remaining file, and costs no
+  photo one of its six attempts.
+- The device token is unreadable in the app's own files, survives a cold start,
+  and goes away with the Keystore key when the user signs out.
 - A 216-file batch ran end to end through WorkManager, across a device reboot,
   with no duplicates.
 - Free-up-space refuses to delete a file the server cannot vouch for, and does
@@ -77,9 +81,13 @@ Details in [android/README.md](android/README.md#known-gaps).
 | 2 | Go vs Node | **Node 24 + Fastify** — chosen so the API could be built and curl-verified on the dev machine straight away |
 | 5 | Encryption at rest | Plain blobs for v1; LUKS on the disk itself |
 
+Raised outside §16 and now settled: `androidx.security.crypto` is deprecated, so
+the device token moved to a Keystore-backed wrapper of our own. Only the token is
+encrypted, and phones that were already paired migrate across without signing in
+again.
+
 Still open: disk capacity (§16.3), number of phones (§16.4), album model
-(§16.6). Newly raised: `androidx.security.crypto` is deprecated, so device-token
-storage needs a replacement before v1.
+(§16.6).
 
 ## Getting started
 

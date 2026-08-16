@@ -54,7 +54,7 @@ app/src/main/java/com/kadr/app/
 ├── data/
 │   ├── local/     Room: LocalAsset, the §8 state machine, DAO
 │   ├── media/     MediaStoreScanner, Sha256Hasher
-│   ├── prefs/     SettingsStore (EncryptedSharedPreferences)
+│   ├── prefs/     SettingsStore, KeystoreCipher (the token at rest)
 │   ├── remote/    Retrofit API, DTOs, ChunkRequestBody, error mapping
 │   └── repo/      BackupRepository — scan and upload live here
 ├── di/            Hilt modules
@@ -92,10 +92,17 @@ tunnel over adb first:
 adb reverse tcp:8787 tcp:8787
 ```
 
-Get a pairing code from the running server, then:
+Then pass an account the server knows (`node src/cli.js` creates the first one):
 
 ```bash
-adb shell am instrument -w -e kadrServerUrl http://127.0.0.1:8787 -e kadrPairCode 123456 -e class com.kadr.app.BackupFlowTest com.kadr.app.debug.test/androidx.test.runner.AndroidJUnitRunner
+adb shell am instrument -w -e kadrServerUrl http://127.0.0.1:8787 -e kadrUser tester -e kadrPassword secret -e class com.kadr.app.BackupFlowTest com.kadr.app.debug.test/androidx.test.runner.AndroidJUnitRunner
+```
+
+`SettingsStoreTest` and `LegacyPrefsMigrationTest` need no server at all, and
+neither do `UploadFailureTest` or `MigrationTest`:
+
+```bash
+adb shell am instrument -w -e class com.kadr.app.SettingsStoreTest,com.kadr.app.LegacyPrefsMigrationTest,com.kadr.app.UploadFailureTest,com.kadr.app.MigrationTest com.kadr.app.debug.test/androidx.test.runner.AndroidJUnitRunner
 ```
 
 `SeedMediaTest` is a fixture, not a test: it plants four demo images and leaves
@@ -104,6 +111,34 @@ them, so the app can be driven by hand against something real.
 ```bash
 adb shell am instrument -w -e class com.kadr.app.SeedMediaTest com.kadr.app.debug.test/androidx.test.runner.AndroidJUnitRunner
 ```
+
+## The device token at rest (§6, §13)
+
+The token is a bearer credential for the whole library, so it is the one setting
+that is encrypted: AES-256-GCM under a key generated in the Android Keystore,
+which the app can use but never read out. Everything else — server address,
+battery rules, the sync cursor — is stored as it reads, because encrypting a
+Wi-Fi toggle buys nothing and hides what is actually sensitive.
+
+This replaces `androidx.security.crypto`, which is deprecated upstream. §6 asks
+for encrypted storage, not for that library, and `KeystoreCipher` is about eighty
+lines — small enough to read in full, which matters more here than anywhere else
+in the app. The key is deliberately **not** lock-screen bound: §10 runs the batch
+at night on a locked phone with nobody there to authenticate.
+
+Two decisions worth knowing about:
+
+- **An unreadable token reads as signed out, not as a crash.** A wiped Keystore
+  or a damaged value returns null and the user is asked for their password
+  again, which is something they can act on. Throwing would be a crash on every
+  cold start with no way out but clearing app data.
+- **Signing out deletes the key, not just the value.** A stray copy of the old
+  ciphertext is then unusable by anyone.
+
+`LegacyPrefsMigration` moves phones that were already paired under the old
+library across on first launch, so nobody is signed out of a library they
+already have. It is the only code left touching the deprecated dependency and
+can be deleted a release after v1.
 
 ## The backup engine (M3)
 
@@ -244,13 +279,6 @@ touch targets are in `ui/Haptics.kt` and `ui/theme/Theme.kt`.
   silently swallowing every later request); the remaining cause is not yet
   identified. §14's "survives a reboot mid-batch" is therefore **not signed off**.
   Worth retrying on a physical device before digging further.
-- **`androidx.security.crypto` is deprecated.** `EncryptedSharedPreferences` and
-  `MasterKey` both emit deprecation warnings. It still works and §6 specifies
-  it, but token storage needs a decision before v1 — most likely a small
-  Keystore-backed wrapper of our own.
-- The Settings screen does not exist, so the excluded-folder list is only
-  configurable through `SettingsStore` (defaults: `.thumbnails`, `WhatsApp`,
-  `Screenshots`). The network and battery toggles are on the debug screen.
 - **Not verified by automation**: pinch-to-zoom between 2/3/5 columns and the
   shared-element animation itself. `adb shell input` cannot send multi-touch,
   and a transition is not something a screenshot proves. Both are wired and
