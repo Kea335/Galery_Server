@@ -37,7 +37,7 @@ import java.security.MessageDigest
  *
  *   adb reverse tcp:8787 tcp:8787
  *   adb shell am instrument -w \
- *     -e kadrServerUrl http://127.0.0.1:8787 -e kadrPairCode 123456 \
+ *     -e kadrServerUrl http://127.0.0.1:8787 -e kadrUser tester -e kadrPassword <password> \
  *     -e class com.kadr.app.BackupFlowTest \
  *     com.kadr.app.debug.test/androidx.test.runner.AndroidJUnitRunner
  */
@@ -51,9 +51,12 @@ class BackupFlowTest {
     private val serverUrl: String
         get() = arguments.getString("kadrServerUrl") ?: "http://10.0.2.2:8787"
 
-    private val pairCode: String
-        get() = requireNotNull(arguments.getString("kadrPairCode")) {
-            "Pass -e kadrPairCode <6 digits>"
+    private val username: String
+        get() = arguments.getString("kadrUser") ?: "tester"
+
+    private val password: String
+        get() = requireNotNull(arguments.getString("kadrPassword")) {
+            "Pass -e kadrPassword <password>"
         }
 
     private lateinit var database: KadrDatabase
@@ -96,19 +99,19 @@ class BackupFlowTest {
     }
 
     @Test
-    fun pairs_indexes_mediastore_and_uploads_one_file_intact() = runBlocking {
+    fun signs_in_indexes_mediastore_and_uploads_one_file_intact() = runBlocking {
         val stamp = System.currentTimeMillis()
         val bigName = "kadr_big_$stamp.jpg"
         seeded += TestMedia.seedJpeg(resolver, "kadr_small_$stamp.jpg", 640, 480)
         // Deliberately over 4 MB so the upload has to take the chunked path.
         seeded += TestMedia.seedJpeg(resolver, bigName, 2048, 1536, padTo = 5L * 1024 * 1024)
 
-        // ── Pair ────────────────────────────────────────────────────────────
+        // ── Sign in ─────────────────────────────────────────────────────────
         val health = repository.health(serverUrl).getOrThrow()
         assertTrue("Server should report a version", health.version.isNotBlank())
 
-        repository.pair(serverUrl, pairCode).getOrThrow()
-        assertTrue("Token should be stored after pairing", settings.current.isPaired)
+        repository.login(serverUrl, username, password).getOrThrow()
+        assertTrue("A token should be stored after signing in", settings.current.isPaired)
 
         // ── Scan (§10.1) ────────────────────────────────────────────────────
         val scan = repository.scan().getOrThrow()

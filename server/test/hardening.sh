@@ -54,11 +54,18 @@ stop_server() {
   SERVER_PID=""
 }
 
-pair() {
-  local code
-  code=$(curl -s -X POST "$BASE/auth/pair-code" | jget data.code)
-  TOKEN=$(curl -s -X POST "$BASE/auth/pair" -H 'Content-Type: application/json' \
-    -d "{\"code\":\"$code\",\"deviceName\":\"Hardening\"}" | jget data.token)
+USERNAME=hardening-tester
+PASSWORD=hardeningpassword123
+
+sign_in() {
+  # The account is created once; on later calls the CLI simply refuses and the
+  # existing one is reused.
+  printf '%s\n%s\n' "$PASSWORD" "$PASSWORD" |
+    KADR_DATA_DIR="$DATA" node src/cli.js user add "$USERNAME" >/dev/null 2>&1
+
+  TOKEN=$(curl -s -X POST "$BASE/auth/login" -H 'Content-Type: application/json' \
+    -d "{\"username\":\"$USERNAME\",\"password\":\"$PASSWORD\",\"deviceName\":\"Hardening\"}" \
+    | jget data.token)
 }
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -66,7 +73,7 @@ section '1. A full disk is refused before a byte is sent (§15)'
 
 # An absurd reserve makes every upload look like it would fill the disk.
 start_server KADR_MIN_FREE_BYTES=999999999999999
-pair
+sign_in
 
 head -c 65536 /dev/urandom > "$TMP/file.bin"
 SIZE=$(( $(wc -c < "$TMP/file.bin") ))
@@ -93,7 +100,7 @@ stop_server
 section '2. The same server with room to work'
 
 start_server
-pair
+sign_in
 
 status=$(curl -s -o "$TMP/body" -w '%{http_code}' -X POST "$BASE/uploads" \
   -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
@@ -118,7 +125,8 @@ VERSION_BEFORE=$(node -e "
   const db = new DatabaseSync('$DATA/kadr.db');
   console.log(db.prepare('PRAGMA user_version').get().user_version);
 ")
-check 'the schema records its version' "$VERSION_BEFORE" 1
+# v2 added accounts; bump this whenever a migration lands.
+check 'the schema records its version' "$VERSION_BEFORE" 2
 
 stop_server
 start_server

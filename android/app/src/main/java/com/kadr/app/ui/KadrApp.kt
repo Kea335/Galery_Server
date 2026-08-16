@@ -23,7 +23,7 @@ import com.kadr.app.ui.debug.DebugScreen
 import com.kadr.app.ui.gallery.GalleryViewModel
 import com.kadr.app.ui.gallery.TimelineScreen
 import com.kadr.app.ui.gallery.ViewerScreen
-import com.kadr.app.ui.pair.PairScreen
+import com.kadr.app.ui.login.LoginScreen
 import com.kadr.app.ui.settings.SettingsScreen
 import com.kadr.app.ui.settings.TrashScreen
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -31,7 +31,7 @@ import kotlinx.coroutines.flow.StateFlow
 import javax.inject.Inject
 
 object Routes {
-    const val PAIR = "pair"
+    const val LOGIN = "login"
     const val TIMELINE = "timeline"
     const val BACKUP = "backup"
     const val SETTINGS = "settings"
@@ -55,7 +55,7 @@ fun KadrApp() {
 
     // Read once: after this, the screens drive navigation themselves, so
     // re-pairing does not yank the user mid-screen.
-    val startDestination = remember { if (settings.isPaired) Routes.TIMELINE else Routes.PAIR }
+    val startDestination = remember { if (settings.isPaired) Routes.TIMELINE else Routes.LOGIN }
 
     // One instance for both the grid and the viewer, so the pager indexes line
     // up with what the timeline is showing.
@@ -69,11 +69,11 @@ fun KadrApp() {
             enterTransition = { fadeIn(spring(dampingRatio = 0.8f, stiffness = Spring.StiffnessMediumLow)) },
             exitTransition = { fadeOut(spring(dampingRatio = 0.8f, stiffness = Spring.StiffnessMediumLow)) },
         ) {
-            composable(Routes.PAIR) {
-                PairScreen(
-                    onPaired = {
+            composable(Routes.LOGIN) {
+                LoginScreen(
+                    onSignedIn = {
                         navController.navigate(Routes.TIMELINE) {
-                            popUpTo(Routes.PAIR) { inclusive = true }
+                            popUpTo(Routes.LOGIN) { inclusive = true }
                         }
                     },
                 )
@@ -105,7 +105,7 @@ fun KadrApp() {
                     onBack = { navController.popBackStack() },
                     onOpenSettings = { navController.navigate(Routes.SETTINGS) },
                     onUnpaired = {
-                        navController.navigate(Routes.PAIR) {
+                        navController.navigate(Routes.LOGIN) {
                             popUpTo(0) { inclusive = true }
                         }
                     },
@@ -117,7 +117,7 @@ fun KadrApp() {
                     onBack = { navController.popBackStack() },
                     onOpenTrash = { navController.navigate(Routes.TRASH) },
                     onUnpaired = {
-                        navController.navigate(Routes.PAIR) {
+                        navController.navigate(Routes.LOGIN) {
                             popUpTo(0) { inclusive = true }
                         }
                     },

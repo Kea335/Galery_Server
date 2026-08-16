@@ -17,7 +17,7 @@ import com.kadr.app.data.remote.CheckRequest
 import com.kadr.app.data.remote.ChunkRequestBody
 import com.kadr.app.data.remote.CreateUploadRequest
 import com.kadr.app.data.remote.HealthResponse
-import com.kadr.app.data.remote.PairRequest
+import com.kadr.app.data.remote.LoginRequest
 import com.kadr.app.data.remote.apiCall
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CancellationException
@@ -118,15 +118,26 @@ class BackupRepository @Inject constructor(
         }
     }
 
-    suspend fun pair(serverUrl: String, code: String): Result<Unit> = runCatching {
-        withContext(Dispatchers.IO) {
-            val deviceName = "${Build.MANUFACTURER} ${Build.MODEL}".trim()
-            val response = apiCall(json) {
-                apiProvider.apiFor(serverUrl).pair(PairRequest(code = code, deviceName = deviceName))
-            }.data
-            settings.savePairing(serverUrl, response.deviceId, response.token)
+    /**
+     * Signs in and stores the device token. The password is never kept — from
+     * here on every request carries the token instead.
+     */
+    suspend fun login(serverUrl: String, username: String, password: String): Result<Unit> =
+        runCatching {
+            withContext(Dispatchers.IO) {
+                val deviceName = "${Build.MANUFACTURER} ${Build.MODEL}".trim()
+                val response = apiCall(json) {
+                    apiProvider.apiFor(serverUrl).login(
+                        LoginRequest(
+                            username = username.trim(),
+                            password = password,
+                            deviceName = deviceName,
+                        ),
+                    )
+                }.data
+                settings.savePairing(serverUrl, response.deviceId, response.token)
+            }
         }
-    }
 
     // ─── Scanning (§10.1) ───────────────────────────────────────────────────
 

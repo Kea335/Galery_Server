@@ -38,6 +38,14 @@ check() { if [ "$2" = "$3" ]; then pass "$1"; else fail "$1 — expected [$3], g
 jget() { node test/jget.mjs "$1"; }
 body() { cat "$TMP/body"; }
 
+USERNAME=restart-tester
+PASSWORD=restartpassword123
+
+create_account() {
+  printf '%s\n%s\n' "$PASSWORD" "$PASSWORD" |
+    KADR_DATA_DIR="$DATA" node src/cli.js user add "$USERNAME" >/dev/null 2>&1
+}
+
 start_server() {
   KADR_PORT=$PORT KADR_DATA_DIR="$DATA" node src/index.js > "$TMP/server.log" 2>&1 &
   SERVER_PID=$!
@@ -59,11 +67,12 @@ printf '\n\033[1mUpload interrupted by a server restart\033[0m\n'
 
 start_server
 pass 'server started'
+create_account
 
-CODE=$(curl -s -X POST "$BASE/auth/pair-code" | jget data.code)
-TOKEN=$(curl -s -X POST "$BASE/auth/pair" -H 'Content-Type: application/json' \
-  -d "{\"code\":\"$CODE\",\"deviceName\":\"Restart Test\"}" | jget data.token)
-if [ -n "$TOKEN" ]; then pass 'paired'; else fail 'paired'; exit 1; fi
+TOKEN=$(curl -s -X POST "$BASE/auth/login" -H 'Content-Type: application/json' \
+  -d "{\"username\":\"$USERNAME\",\"password\":\"$PASSWORD\",\"deviceName\":\"Restart Test\"}" \
+  | jget data.token)
+if [ -n "$TOKEN" ]; then pass 'signed in'; else fail 'signed in'; exit 1; fi
 
 head -c 9961472 /dev/urandom > "$TMP/clip.bin"
 SIZE=$(( $(wc -c < "$TMP/clip.bin") ))

@@ -35,7 +35,7 @@ import org.junit.runner.RunWith
  *
  *   adb reverse tcp:8787 tcp:8787
  *   adb shell am instrument -w \
- *     -e kadrServerUrl http://127.0.0.1:8787 -e kadrPairCode 123456 \
+ *     -e kadrServerUrl http://127.0.0.1:8787 -e kadrPassword 123456 \
  *     -e class com.kadr.app.FreeUpSpaceTest \
  *     com.kadr.app.debug.test/androidx.test.runner.AndroidJUnitRunner
  */
@@ -49,8 +49,11 @@ class FreeUpSpaceTest {
     private val serverUrl: String
         get() = arguments.getString("kadrServerUrl") ?: "http://127.0.0.1:8787"
 
-    private val pairCode: String
-        get() = requireNotNull(arguments.getString("kadrPairCode")) { "Pass -e kadrPairCode" }
+    private val username: String
+        get() = arguments.getString("kadrUser") ?: "tester"
+
+    private val password: String
+        get() = requireNotNull(arguments.getString("kadrPassword")) { "Pass -e kadrPassword" }
 
     private lateinit var database: KadrDatabase
     private lateinit var settings: SettingsStore
@@ -85,12 +88,12 @@ class FreeUpSpaceTest {
         )
         space = SpaceRepository(context, database.assets(), apiProvider, json)
 
-        // A pairing code is single use, so pair once for the whole class and
-        // hand the token to the tests that follow.
+        // Signing in once per class keeps the device list from filling up with
+        // a new entry for every test.
         if (original == null) original = savedSettings
-        if (!alreadyPaired) {
-            backup.pair(serverUrl, pairCode).getOrThrow()
-            alreadyPaired = true
+        if (!alreadySignedIn) {
+            backup.login(serverUrl, username, password).getOrThrow()
+            alreadySignedIn = true
         }
 
         mediaUri = TestMedia.seedJpeg(resolver, "kadr_free_${System.nanoTime()}.jpg", 480, 360)
@@ -125,9 +128,9 @@ class FreeUpSpaceTest {
 
     companion object {
         private var original: KadrSettings? = null
-        private var alreadyPaired = false
+        private var alreadySignedIn = false
 
-        /** Put the installed app's own pairing back once the class is done. */
+        /** Put the installed app's own session back once the class is done. */
         @AfterClass
         @JvmStatic
         fun restoreAppSettings() {
@@ -137,7 +140,7 @@ class FreeUpSpaceTest {
                     .savePairing(saved.serverUrl, saved.deviceId, saved.token)
             }
             original = null
-            alreadyPaired = false
+            alreadySignedIn = false
         }
     }
 

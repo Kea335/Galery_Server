@@ -14,6 +14,10 @@ fun formatBytes(bytes: Long): String {
     return String.format(Locale.US, if (value >= 100) "%.0f %s" else "%.1f %s", value, units[unit])
 }
 
+/** Something short enough to put in front of a person, whatever went wrong. */
+fun Throwable.readable(): String =
+    message?.takeIf { it.isNotBlank() } ?: this::class.simpleName ?: "Something went wrong."
+
 fun formatDuration(millis: Long): String {
     val totalSeconds = millis / 1000
     val minutes = totalSeconds / 60

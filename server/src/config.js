@@ -20,10 +20,10 @@ export const config = {
   tmpDir: path.join(dataDir, 'tmp'),
   dbPath: process.env.KADR_DB_PATH || path.join(dataDir, 'kadr.db'),
 
-  // Pairing (§9, §13)
-  pairCodeTtlMs: 5 * 60_000,
-  pairMaxAttempts: 5,
-  pairLockoutMs: 15 * 60_000,
+  // Sign-in (§13). A password can be guessed at, unlike a one-shot code that
+  // expired in five minutes, so the throttle matters more than it used to.
+  loginMaxAttempts: 5,
+  loginLockoutMs: 15 * 60_000,
 
   // Uploads (§9, §10)
   uploadSessionTtlMs: 7 * 24 * 60 * 60_000,

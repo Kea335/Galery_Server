@@ -42,7 +42,7 @@ import kotlin.math.abs
  *
  *   adb reverse tcp:8787 tcp:8787
  *   adb shell am instrument -w \
- *     -e kadrServerUrl http://127.0.0.1:8787 -e kadrPairCode 123456 \
+ *     -e kadrServerUrl http://127.0.0.1:8787 -e kadrPassword 123456 \
  *     -e class com.kadr.app.VideoPlaybackTest \
  *     com.kadr.app.debug.test/androidx.test.runner.AndroidJUnitRunner
  */
@@ -57,9 +57,12 @@ class VideoPlaybackTest {
     private val serverUrl: String
         get() = arguments.getString("kadrServerUrl") ?: "http://127.0.0.1:8787"
 
-    private val pairCode: String
-        get() = requireNotNull(arguments.getString("kadrPairCode")) {
-            "Pass -e kadrPairCode <6 digits>"
+    private val username: String
+        get() = arguments.getString("kadrUser") ?: "tester"
+
+    private val password: String
+        get() = requireNotNull(arguments.getString("kadrPassword")) {
+            "Pass -e kadrPassword <password>"
         }
 
     private lateinit var database: KadrDatabase
@@ -166,7 +169,7 @@ class VideoPlaybackTest {
 
     @Test
     fun b_a_remote_clip_streams_and_seeks_to_the_middle() = runBlocking {
-        backup.pair(serverUrl, pairCode).getOrThrow()
+        backup.login(serverUrl, username, password).getOrThrow()
         val remoteId = backup.upload(assetRowId).getOrThrow()
         assertTrue("Upload returned no asset id", remoteId.isNotBlank())
 

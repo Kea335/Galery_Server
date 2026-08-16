@@ -1,9 +1,9 @@
 import { buildApp } from './app.js'
-import { generatePairCode } from './auth.js'
 import { config } from './config.js'
 import { openDb } from './db.js'
 import { reap } from './reaper.js'
 import { ensureDirs } from './storage.js'
+import { userCount } from './users.js'
 
 const db = openDb()
 await ensureDirs()
@@ -17,13 +17,16 @@ reaperTimer.unref()
 
 await app.listen({ host: config.host, port: config.port })
 
-// A fresh code every boot, valid for 5 minutes. Owner reads it off the console
-// (or the local pairing page, once that exists) and types it into the phone.
-const { code } = generatePairCode(db)
-app.log.info(
-  { dataDir: config.dataDir },
-  `Kadr ${config.version} ready — pairing code ${code} (valid 5 min)`,
-)
+app.log.info({ dataDir: config.dataDir }, `Kadr ${config.version} ready`)
+
+// A server nobody can sign in to is not much use, and the reason is not
+// obvious from a 401 on the phone. Say it here, where the owner is looking.
+if (userCount(db) === 0) {
+  app.log.warn(
+    'No account exists yet. Create one before signing in from the app:\n' +
+      '    node src/cli.js user add <username>',
+  )
+}
 
 reap(db, app.log).catch((err) => app.log.error({ err }, 'startup reaper failed'))
 

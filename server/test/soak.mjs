@@ -17,6 +17,8 @@ import { spawn } from 'node:child_process'
 import fs from 'node:fs/promises'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { openDb } from '../src/db.js'
+import { createUser } from '../src/users.js'
 
 const COUNT = Number(process.env.COUNT || 10_000)
 const CONCURRENCY = Number(process.env.CONCURRENCY || 6)
@@ -37,8 +39,9 @@ const ms = () => Number(process.hrtime.bigint() / 1_000_000n)
 
 async function main() {
   await fs.rm(dataDir, { recursive: true, force: true })
+  await createAccount()
   await startServer()
-  await pair()
+  await signIn()
 
   console.log(`\x1b[1mSoak: ${COUNT.toLocaleString()} assets, concurrency ${CONCURRENCY}\x1b[0m\n`)
 
@@ -251,10 +254,26 @@ async function startServer() {
   throw new Error('server did not come up')
 }
 
-async function pair() {
-  const { code } = await postJson('/auth/pair-code', undefined)
-  const paired = await postJson('/auth/pair', { code, deviceName: 'Soak' })
-  token = paired.token
+const USERNAME = 'soak-tester'
+const PASSWORD = 'soakpassword123'
+
+/** The account has to exist before the server can be signed in to. */
+async function createAccount() {
+  const db = openDb(path.join(dataDir, 'kadr.db'))
+  try {
+    await createUser(db, USERNAME, PASSWORD)
+  } finally {
+    db.close()
+  }
+}
+
+async function signIn() {
+  const session = await postJson('/auth/login', {
+    username: USERNAME,
+    password: PASSWORD,
+    deviceName: 'Soak',
+  })
+  token = session.token
 }
 
 try {

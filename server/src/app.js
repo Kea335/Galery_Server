@@ -1,5 +1,5 @@
 import Fastify from 'fastify'
-import { createAuthHook, createPairLimiter } from './auth.js'
+import { createAuthHook, createLoginLimiter } from './auth.js'
 import assetRoutes from './routes/assets.js'
 import authRoutes from './routes/auth.js'
 import healthRoutes from './routes/health.js'
@@ -20,8 +20,8 @@ export async function buildApp({ db, logger = true } = {}) {
   app.addContentTypeParser('*', rawStream)
 
   const requireDevice = createAuthHook(db)
-  const pairLimiter = createPairLimiter()
-  const deps = { db, requireDevice, pairLimiter }
+  const loginLimiter = createLoginLimiter()
+  const deps = { db, requireDevice, loginLimiter }
 
   await app.register(healthRoutes, { prefix: '/api/v1', ...deps })
   await app.register(authRoutes, { prefix: '/api/v1', ...deps })

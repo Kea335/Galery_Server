@@ -16,11 +16,15 @@ interface KadrApi {
     @GET("api/v1/health")
     suspend fun health(): Envelope<HealthResponse>
 
-    @POST("api/v1/auth/pair")
-    suspend fun pair(@Body body: PairRequest): Envelope<PairResponse>
+    /** Anyone who signs in sees the same library (§16 decision). */
+    @POST("api/v1/auth/login")
+    suspend fun login(@Body body: LoginRequest): Envelope<LoginResponse>
 
     @POST("api/v1/auth/revoke")
     suspend fun revoke(): Envelope<Map<String, Boolean>>
+
+    @GET("api/v1/auth/devices")
+    suspend fun devices(): Envelope<DeviceListResponse>
 
     /** Delta sync (§9). Ordered by updated_at; includes tombstones. */
     @GET("api/v1/assets")

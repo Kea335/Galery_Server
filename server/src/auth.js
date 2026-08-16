@@ -7,74 +7,53 @@ export function sha256hex(value) {
 }
 
 /**
- * Issue a fresh 6-digit pairing code. Any earlier unused code is invalidated,
- * so only one code is ever live at a time. Codes expire in 5 minutes and are
- * single use (§9).
+ * Issues a device token for a signed-in user.
+ *
+ * The token, not the password, is what every later request carries — so a
+ * phone never stores the password, and one device can be revoked without
+ * touching the others.
  */
-export function generatePairCode(db) {
-  const code = String(crypto.randomInt(0, 1_000_000)).padStart(6, '0')
-  const now = Date.now()
-  const expiresAt = now + config.pairCodeTtlMs
-
-  db.prepare('DELETE FROM pair_codes WHERE used_at IS NULL').run()
-  db.prepare(
-    'INSERT INTO pair_codes (code_hash, created_at, expires_at) VALUES (?, ?, ?)',
-  ).run(sha256hex(code), now, expiresAt)
-
-  return { code, expiresAt }
-}
-
-/**
- * Burn a pairing code. Returns true only if it existed, was unused and unexpired.
- * The UPDATE ... WHERE used_at IS NULL makes this atomic against a double redeem.
- */
-export function consumePairCode(db, code) {
-  const now = Date.now()
-  const res = db
-    .prepare(
-      'UPDATE pair_codes SET used_at = ? WHERE code_hash = ? AND used_at IS NULL AND expires_at > ?',
-    )
-    .run(now, sha256hex(String(code)), now)
-  return res.changes === 1
-}
-
-export function createDevice(db, name) {
+export function createDevice(db, userId, name) {
   const id = crypto.randomUUID()
   const token = crypto.randomBytes(32).toString('base64url')
+  const now = Date.now()
+
   db.prepare(
-    'INSERT INTO devices (id, name, token_hash, created_at, last_seen_at) VALUES (?, ?, ?, ?, ?)',
-  ).run(id, name, sha256hex(token), Date.now(), Date.now())
+    `INSERT INTO devices (id, name, token_hash, created_at, last_seen_at, user_id)
+     VALUES (?, ?, ?, ?, ?, ?)`,
+  ).run(id, name, sha256hex(token), now, now, userId)
+
   return { deviceId: id, token }
 }
 
 /**
- * Per-IP throttle for /auth/pair: 5 failures, then a 15 minute lockout (§13).
+ * Per-IP throttle for sign-in: 5 failures, then a 15 minute lockout (§13).
  * In memory on purpose — a restart clearing it is acceptable, and it keeps the
  * HDD out of the hot path.
  */
-export function createPairLimiter() {
+export function createLoginLimiter() {
   const attempts = new Map()
 
   return {
     check(ip) {
-      const rec = attempts.get(ip)
-      if (!rec) return { allowed: true }
-      if (rec.lockedUntil && rec.lockedUntil > Date.now()) {
-        return { allowed: false, retryAfterMs: rec.lockedUntil - Date.now() }
+      const record = attempts.get(ip)
+      if (!record) return { allowed: true }
+      if (record.lockedUntil && record.lockedUntil > Date.now()) {
+        return { allowed: false, retryAfterMs: record.lockedUntil - Date.now() }
       }
       return { allowed: true }
     },
     fail(ip) {
-      const rec = attempts.get(ip) ?? { count: 0, lockedUntil: 0 }
-      if (rec.lockedUntil && rec.lockedUntil <= Date.now()) {
-        rec.count = 0
-        rec.lockedUntil = 0
+      const record = attempts.get(ip) ?? { count: 0, lockedUntil: 0 }
+      if (record.lockedUntil && record.lockedUntil <= Date.now()) {
+        record.count = 0
+        record.lockedUntil = 0
       }
-      rec.count += 1
-      if (rec.count >= config.pairMaxAttempts) {
-        rec.lockedUntil = Date.now() + config.pairLockoutMs
+      record.count += 1
+      if (record.count >= config.loginMaxAttempts) {
+        record.lockedUntil = Date.now() + config.loginLockoutMs
       }
-      attempts.set(ip, rec)
+      attempts.set(ip, record)
     },
     succeed(ip) {
       attempts.delete(ip)
@@ -101,7 +80,7 @@ export function createAuthHook(db) {
       .get(sha256hex(match[1]))
 
     if (!device || device.revoked) {
-      return fail(reply, 401, 'UNAUTHORIZED', 'Invalid or revoked token.')
+      return fail(reply, 401, 'UNAUTHORIZED', 'Invalid or revoked token. Sign in again.')
     }
 
     request.device = device

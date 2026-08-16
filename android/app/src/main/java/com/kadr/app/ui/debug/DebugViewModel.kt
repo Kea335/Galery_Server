@@ -10,7 +10,7 @@ import com.kadr.app.data.prefs.SettingsStore
 import com.kadr.app.data.repo.BackupProgress
 import com.kadr.app.data.repo.BackupRepository
 import com.kadr.app.data.repo.LibraryRepository
-import com.kadr.app.ui.pair.readable
+import com.kadr.app.ui.readable
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted

@@ -1,10 +1,11 @@
-package com.kadr.app.ui.pair
+package com.kadr.app.ui.login
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.kadr.app.data.prefs.SettingsStore
 import com.kadr.app.data.remote.HealthResponse
 import com.kadr.app.data.repo.BackupRepository
+import com.kadr.app.ui.readable
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -13,32 +14,40 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
-data class PairUiState(
+data class LoginUiState(
     val serverUrl: String = "",
-    val code: String = "",
+    val username: String = "",
+    val password: String = "",
     val busy: Boolean = false,
     val error: String? = null,
     val health: HealthResponse? = null,
-)
+) {
+    val canSubmit: Boolean
+        get() = !busy && serverUrl.isNotBlank() && username.isNotBlank() && password.isNotBlank()
+}
 
 @HiltViewModel
-class PairViewModel @Inject constructor(
+class LoginViewModel @Inject constructor(
     private val repository: BackupRepository,
     settingsStore: SettingsStore,
 ) : ViewModel() {
 
-    private val _state = MutableStateFlow(PairUiState(serverUrl = settingsStore.current.serverUrl))
-    val state: StateFlow<PairUiState> = _state.asStateFlow()
+    private val _state = MutableStateFlow(LoginUiState(serverUrl = settingsStore.current.serverUrl))
+    val state: StateFlow<LoginUiState> = _state.asStateFlow()
 
     fun onServerUrlChange(value: String) {
         _state.update { it.copy(serverUrl = value, error = null, health = null) }
     }
 
-    fun onCodeChange(value: String) {
-        _state.update { it.copy(code = value.filter(Char::isDigit).take(6), error = null) }
+    fun onUsernameChange(value: String) {
+        _state.update { it.copy(username = value, error = null) }
     }
 
-    /** Reachability check before asking for a code — a 5-minute code is precious. */
+    fun onPasswordChange(value: String) {
+        _state.update { it.copy(password = value, error = null) }
+    }
+
+    /** Reachability check before asking for credentials. */
     fun testConnection() {
         val url = _state.value.serverUrl
         if (url.isBlank()) {
@@ -53,23 +62,19 @@ class PairViewModel @Inject constructor(
         }
     }
 
-    fun pair(onPaired: () -> Unit) {
+    fun signIn(onSignedIn: () -> Unit) {
         val current = _state.value
-        if (current.code.length != 6) {
-            _state.update { it.copy(error = "The pairing code is 6 digits.") }
-            return
-        }
+        if (!current.canSubmit) return
+
         viewModelScope.launch {
             _state.update { it.copy(busy = true, error = null) }
-            repository.pair(current.serverUrl, current.code)
+            repository.login(current.serverUrl, current.username, current.password)
                 .onSuccess {
-                    _state.update { it.copy(busy = false) }
-                    onPaired()
+                    // The password is not kept anywhere, not even in this state.
+                    _state.update { it.copy(busy = false, password = "") }
+                    onSignedIn()
                 }
                 .onFailure { e -> _state.update { it.copy(busy = false, error = e.readable()) } }
         }
     }
 }
-
-internal fun Throwable.readable(): String =
-    message?.takeIf { it.isNotBlank() } ?: this::class.simpleName ?: "Something went wrong."

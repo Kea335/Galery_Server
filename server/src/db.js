@@ -68,6 +68,33 @@ const MIGRATIONS = [
       );
     `)
   },
+
+  // v2 — accounts.
+  //
+  // The 6-digit pairing code is replaced by a username and password: anyone who
+  // installs the app and signs in sees the same library. A login still ends in
+  // a device token, so nothing downstream changes — only how the token is
+  // obtained.
+  (db) => {
+    db.exec(`
+      CREATE TABLE users (
+        id            TEXT PRIMARY KEY,
+        username      TEXT NOT NULL COLLATE NOCASE UNIQUE,
+        password_hash TEXT NOT NULL,
+        created_at    INTEGER NOT NULL,
+        updated_at    INTEGER NOT NULL
+      );
+
+      ALTER TABLE devices ADD COLUMN user_id TEXT REFERENCES users(id);
+
+      DROP TABLE pair_codes;
+    `)
+
+    // Any device paired under the old scheme belongs to nobody. Rather than
+    // leave tokens floating without an account behind them, retire them and
+    // make those phones sign in again.
+    db.exec('UPDATE devices SET revoked = 1')
+  },
 ]
 
 function migrate(db) {

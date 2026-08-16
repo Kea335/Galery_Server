@@ -66,34 +66,44 @@ printf '     free disk: %s bytes · assets: %s · rss: %s\n' \
   "$(body | jget data.rssBytes)"
 
 # ─────────────────────────────────────────────────────────────────────────────
-section '2. Pairing (§9, §13)'
+section '2. Sign-in (§13)'
 
-status=$(req POST /auth/pair-code)
-check 'localhost can mint a pairing code' "$status" 200
-CODE=$(body | jget data.code)
+USERNAME=${KADR_USER:-tester}
+PASSWORD=${KADR_PASSWORD:-testerpassword123}
 
-WRONG=$(printf '%06d' $(( (10#$CODE + 7) % 1000000 )))
-status=$(req POST /auth/pair -H 'Content-Type: application/json' \
-  -d "{\"code\":\"$WRONG\",\"deviceName\":\"impostor\"}")
-check 'wrong code is rejected' "$status" 401
+# Idempotent: create the account, or reset its password if it already exists.
+printf '%s\n%s\n' "$PASSWORD" "$PASSWORD" | node src/cli.js user add "$USERNAME" >/dev/null 2>&1 ||
+  printf '%s\n%s\n' "$PASSWORD" "$PASSWORD" | node src/cli.js user passwd "$USERNAME" >/dev/null 2>&1
+pass "account $USERNAME exists"
 
-status=$(req POST /auth/pair -H 'Content-Type: application/json' \
-  -d "{\"code\":\"$CODE\",\"deviceName\":\"Test Pixel\"}")
-check 'correct code pairs' "$status" 201
+status=$(req POST /auth/login -H 'Content-Type: application/json' \
+  -d "{\"username\":\"$USERNAME\",\"password\":\"definitely-not-it\",\"deviceName\":\"impostor\"}")
+check 'a wrong password is refused' "$status" 401
+check '  without saying which half was wrong' "$(body | jget error.code)" BAD_CREDENTIALS
+
+status=$(req POST /auth/login -H 'Content-Type: application/json' \
+  -d "{\"username\":\"nobody-here\",\"password\":\"$PASSWORD\",\"deviceName\":\"impostor\"}")
+check 'an account that does not exist looks the same' "$(body | jget error.code)" BAD_CREDENTIALS
+
+# Anyone who signs in sees the same library, so the name is matched loosely.
+UPPER=$(printf '%s' "$USERNAME" | tr '[:lower:]' '[:upper:]')
+status=$(req POST /auth/login -H 'Content-Type: application/json' \
+  -d "{\"username\":\"$UPPER\",\"password\":\"$PASSWORD\",\"deviceName\":\"Test Pixel\"}")
+check 'the right password signs in' "$status" 201
+check '  and the username is case-insensitive' "$(body | jget data.username)" "$USERNAME"
 TOKEN=$(body | jget data.token)
 DEVICE=$(body | jget data.deviceId)
 if [ -n "$TOKEN" ]; then pass 'token issued'; else fail 'token issued'; fi
 if [ -n "$DEVICE" ]; then pass 'device id issued'; else fail 'device id issued'; fi
-
-status=$(req POST /auth/pair -H 'Content-Type: application/json' \
-  -d "{\"code\":\"$CODE\",\"deviceName\":\"replay\"}")
-check 'the same code cannot be used twice' "$status" 401
 
 status=$(req GET /assets)
 check 'no token means no library' "$status" 401
 
 status=$(req GET /assets -H 'Authorization: Bearer not-a-real-token')
 check 'a bogus token means no library' "$status" 401
+
+status=$(authed GET /auth/devices)
+check 'the signed-in devices can be listed' "$status" 200
 
 # ─────────────────────────────────────────────────────────────────────────────
 section '3. A 9.5 MB file, uploaded in 4 MB chunks (§10.4)'

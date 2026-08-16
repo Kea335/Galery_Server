@@ -18,10 +18,35 @@ data class ApiErrorBody(
 )
 
 @Serializable
-data class PairRequest(val code: String, val deviceName: String)
+data class LoginRequest(
+    val username: String,
+    val password: String,
+    val deviceName: String,
+)
+
+/**
+ * The password is exchanged for this once and never sent again — every later
+ * request carries the token instead.
+ */
+@Serializable
+data class LoginResponse(
+    val deviceId: String,
+    val token: String,
+    val username: String = "",
+)
 
 @Serializable
-data class PairResponse(val deviceId: String, val token: String)
+data class DeviceListResponse(val devices: List<SignedInDeviceDto> = emptyList())
+
+@Serializable
+data class SignedInDeviceDto(
+    val id: String,
+    val name: String = "",
+    val createdAt: Long = 0,
+    val lastSeenAt: Long? = null,
+    val revoked: Boolean = false,
+    val current: Boolean = false,
+)
 
 @Serializable
 data class CheckRequest(val hashes: List<String>)
