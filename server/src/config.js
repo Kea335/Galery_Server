@@ -25,6 +25,20 @@ export const config = {
   loginMaxAttempts: 5,
   loginLockoutMs: 15 * 60_000,
 
+  /**
+   * Whose `X-Forwarded-For` to believe.
+   *
+   * Caddy terminates TLS and proxies in from the same machine (see
+   * deploy/Caddyfile), so without this every request looks like it came from
+   * 127.0.0.1 and the per-IP login throttle above collapses into one global
+   * counter — one wrong password would lock out every phone in the house.
+   *
+   * `loopback` and not `true`: only a proxy on this machine is believed. If the
+   * API is ever reachable directly, a header from the LAN cannot forge an
+   * address.
+   */
+  trustProxy: process.env.KADR_TRUST_PROXY || 'loopback',
+
   // Uploads (§9, §10)
   uploadSessionTtlMs: 7 * 24 * 60 * 60_000,
   maxCheckHashes: 500,

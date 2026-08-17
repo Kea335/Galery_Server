@@ -38,7 +38,12 @@ npm install
 npm start
 ```
 
-The pairing code is printed on startup and is valid for 5 minutes.
+Create the first account from the console — it should not come from a web form
+on a box that is deliberately not exposed to the internet (§13):
+
+```bash
+node src/cli.js user add hasan
+```
 
 ### Configuration
 
@@ -51,6 +56,7 @@ All optional, all environment variables:
 | `KADR_HOST` | `0.0.0.0` | Set to `127.0.0.1` when Caddy fronts it |
 | `KADR_PORT` | `8787` | |
 | `KADR_MIN_FREE_BYTES` | 1 GiB | Reserve kept free; a session that would eat into it is refused with `507` before any bytes are sent |
+| `KADR_TRUST_PROXY` | `loopback` | Whose `X-Forwarded-For` to believe. See "Behind a proxy" |
 
 ---
 
@@ -62,9 +68,9 @@ Both suites drive the real HTTP surface with `curl` — no mocks.
 bash test/e2e.sh
 ```
 
-61 checks: pairing and single-use codes, token revocation, chunked upload with
-resume, idempotent re-sends, range gaps, hash mismatch, short chunks, dedupe,
-`Range` correctness, trash round trip.
+94 checks: sign-in and lockout, token revocation, chunked upload with resume,
+idempotent re-sends, range gaps, hash mismatch, short chunks, dedupe, `Range`
+correctness, trash round trip, albums.
 
 ```bash
 bash test/restart.sh
@@ -77,9 +83,10 @@ resumes from the SQLite row and the `.part` file alone.
 bash test/hardening.sh
 ```
 
-12 checks: a full disk is refused before a byte is sent and leaves no partial
-file behind, the same upload succeeds once there is room, and migrations do not
-re-run when the database is reopened.
+16 checks: a full disk is refused before a byte is sent and leaves no partial
+file behind, the same upload succeeds once there is room, migrations do not
+re-run when the database is reopened, and the sign-in throttle locks out one
+address without touching another.
 
 ```bash
 node test/soak.mjs          # 10,000 assets
@@ -109,21 +116,18 @@ contention is deliberate, and it is what found the pagination bug below.
 
 Base path `/api/v1`. Responses are `{ "data": ... }` or `{ "error": { "code", "message" } }`.
 
-### Pair a device
+### Sign in
 
 ```bash
-curl -X POST localhost:8787/api/v1/auth/pair-code
-```
-
-```bash
-curl -X POST localhost:8787/api/v1/auth/pair \
+curl -X POST localhost:8787/api/v1/auth/login \
   -H 'Content-Type: application/json' \
-  -d '{"code":"638208","deviceName":"Pixel 8"}'
+  -d '{"username":"hasan","password":"…","deviceName":"Pixel 8"}'
 ```
 
-`/auth/pair-code` only answers on loopback — the phone never calls it, a human
-reads the code off the console. Five wrong codes from one IP triggers a
-15-minute lockout.
+Anyone who signs in sees the same library (§16). The password is exchanged for a
+device token here and never sent again. Five wrong passwords from one address
+trigger a 15-minute lockout — see "Behind a proxy" for what "address" means once
+Caddy is in front.
 
 ### Ask before sending
 
@@ -211,6 +215,18 @@ trash puts it back in the albums it was in. Freeing local space never touches
 membership at all — that is a phone-side deletion and the server still has the
 file.
 
+### Behind a proxy
+
+Caddy terminates TLS and proxies in from `127.0.0.1`, so the API must be told
+whose `X-Forwarded-For` to believe or every request looks like it came from the
+same address — and §13's per-IP sign-in throttle collapses into one global
+counter, where a single wrong password locks out every phone in the house.
+
+`KADR_TRUST_PROXY` defaults to `loopback`: only a proxy on this machine is
+believed. Deliberately not `true` — if the API is ever reachable directly, a
+header from the LAN must not be able to forge an address. `hardening.sh` §4
+pins both halves: one address gets locked out, another is unaffected.
+
 ### Error codes
 
 | Code | Status | Meaning |
@@ -223,7 +239,7 @@ file.
 | `HASH_MISMATCH` | 409 | Reassembled file hashes wrong; session reset to 0 |
 | `INCOMPLETE` | 409 | `complete` called before all bytes arrived |
 | `DISK_FULL` | 507 | `ENOSPC` — surfaced, never a silent stall |
-| `PAIR_LOCKED` | 429 | Five failed pairing attempts from this IP |
+| `LOGIN_LOCKED` | 429 | Five failed sign-in attempts from this IP |
 | `THUMB_UNAVAILABLE` | 503 | ffmpeg missing or the frame could not be extracted |
 
 ---
@@ -274,7 +290,7 @@ then install the unit:
 ```bash
 sudo cp deploy/kadr.service /etc/systemd/system/
 sudo systemctl enable --now kadr
-journalctl -u kadr -f          # the pairing code appears here on start
+journalctl -u kadr -f          # watch it come up
 ```
 
 TLS terminates at Caddy (see `deploy/Caddyfile`), which is why the unit binds

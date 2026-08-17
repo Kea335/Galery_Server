@@ -146,6 +146,40 @@ check 'health reports a database size' \
   "$([ "$(body | jget data.dbSizeBytes)" -gt 0 ] && echo yes)" yes
 
 # ─────────────────────────────────────────────────────────────────────────────
+section '4. The login throttle knows who is knocking (§13)'
+
+# In production Caddy terminates TLS and proxies in from 127.0.0.1, so every
+# request looks like it came from the same place. Without trustProxy the §13
+# throttle collapses into one global counter: one wrong password locks out the
+# whole house, and an attacker spread across many addresses shares one budget.
+#
+# Nothing here uses the real client address, so the suite cannot lock itself out.
+attempt() { # attempt <forwarded-ip>
+  curl -s -o "$TMP/body" -w '%{http_code}' -X POST "$BASE/auth/login" \
+    -H 'Content-Type: application/json' \
+    -H "X-Forwarded-For: $1" \
+    -d '{"username":"'"$USERNAME"'","password":"definitely-not-it","deviceName":"probe"}'
+}
+
+for _ in 1 2 3 4 5; do attempt 203.0.113.7 >/dev/null; done
+
+status=$(attempt 203.0.113.7)
+check 'five wrong guesses lock that address out' "$status" 429
+check '  and say so' "$(body | jget error.code)" LOGIN_LOCKED
+
+# The whole point: a different phone is not caught in someone else's lockout.
+status=$(attempt 198.51.100.4)
+check 'a different address is unaffected' "$status" 401
+
+# ...and the right password from that address still works, so the throttle is
+# not quietly refusing everyone.
+status=$(curl -s -o "$TMP/body" -w '%{http_code}' -X POST "$BASE/auth/login" \
+  -H 'Content-Type: application/json' -H 'X-Forwarded-For: 198.51.100.4' \
+  -d '{"username":"'"$USERNAME"'","password":"'"$PASSWORD"'","deviceName":"probe"}')
+# 201: a successful sign-in registers a new device.
+check '  and can still sign in' "$status" 201
+
+# ─────────────────────────────────────────────────────────────────────────────
 printf '\n───────────────────────────────\n'
 if [ "$FAILED" -eq 0 ]; then
   printf '\033[32m✓ hardening green\033[0m  %d checks passed\n\n' "$PASSED"

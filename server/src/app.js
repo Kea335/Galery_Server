@@ -1,5 +1,6 @@
 import Fastify from 'fastify'
 import { createAuthHook, createLoginLimiter } from './auth.js'
+import { config } from './config.js'
 import albumRoutes from './routes/albums.js'
 import assetRoutes from './routes/assets.js'
 import authRoutes from './routes/auth.js'
@@ -12,6 +13,9 @@ export async function buildApp({ db, logger = true } = {}) {
     // Chunk bodies are streamed straight to disk, never buffered — this limit
     // only guards the small JSON payloads.
     bodyLimit: 1024 * 1024,
+    // Behind Caddy every request arrives from 127.0.0.1; §13's per-IP login
+    // throttle needs the address the phone actually came from. See config.
+    trustProxy: config.trustProxy,
   })
 
   // Raw passthrough for upload chunks: request.body is the stream itself, so a
