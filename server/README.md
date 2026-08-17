@@ -173,10 +173,50 @@ curl -H "Authorization: Bearer $TOKEN" -H 'Range: bytes=0-1048575' \
   -o head.bin "localhost:8787/api/v1/assets/$ASSET/file"
 ```
 
+### Albums (§16.6)
+
+Manual and shared: §16 already made the library shared, so an album that lived
+on one phone only would contradict the library it belongs to.
+
+```bash
+# create, fill, and read back
+curl -X POST -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
+  -d '{"name":"Georgia 2024"}' "localhost:8787/api/v1/albums"
+
+curl -X POST -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
+  -d "{\"assetIds\":[\"$ASSET\"]}" "localhost:8787/api/v1/albums/$ALBUM/items"
+
+curl -H "Authorization: Bearer $TOKEN" "localhost:8787/api/v1/albums?since=0"
+curl -H "Authorization: Bearer $TOKEN" "localhost:8787/api/v1/album-items?since=0"
+```
+
+Two delta streams, not one. Albums and membership move at completely different
+rates — renaming an album should not drag five thousand membership rows across
+the wire — and each keeps its own `updated_at` counter, so an upload does not
+push every album cursor forward.
+
+There is no "album contents" endpoint on purpose. Clients already mirror the
+library, and `album-items` gives them the relationship; the contents are a join
+they can do locally. Trash needed an endpoint of its own only because delta sync
+carries nothing there but tombstones.
+
+Removing a photo from an album **tombstones** the row (`removed: true`) instead
+of deleting it, for the same reason assets are tombstoned: a row that is simply
+gone is not a change any client can see, so the photo would sit in that album
+forever on every phone that had already synced it. Adding it back clears the
+tombstone rather than colliding with the primary key.
+
+Deleting an **asset** leaves its album rows alone, so restoring it from the
+trash puts it back in the albums it was in. Freeing local space never touches
+membership at all — that is a phone-side deletion and the server still has the
+file.
+
 ### Error codes
 
 | Code | Status | Meaning |
 |---|---|---|
+| `ALBUM_DELETED` | 410 | The album is tombstoned; it cannot be edited |
+| `TOO_MANY` | 400 | More than 500 assets in one album request |
 | `RANGE_GAP` | 409 | Chunk starts past `receivedBytes`; resume from there |
 | `SESSION_RESET` | 409 | The partial file is gone; restart at byte 0 |
 | `LENGTH_MISMATCH` | 400 | Fewer bytes arrived than `Content-Range` promised |

@@ -95,6 +95,43 @@ const MIGRATIONS = [
     // make those phones sign in again.
     db.exec('UPDATE devices SET revoked = 1')
   },
+
+  // v3 — albums (§16.6).
+  //
+  // Manual, server-side and shared, because §16 already made the library
+  // shared: an album that only existed on one phone would contradict the
+  // library it belongs to.
+  //
+  // Membership is tombstoned rather than deleted, for the same reason assets
+  // are. Delta sync carries changes, and a row that is simply gone is not a
+  // change any client can see — the photo would stay in the album forever on
+  // every phone that had already synced it.
+  (db) => {
+    db.exec(`
+      CREATE TABLE albums (
+        id             TEXT PRIMARY KEY,
+        name           TEXT NOT NULL,
+        cover_asset_id TEXT REFERENCES assets(id),
+        created_at     INTEGER NOT NULL,
+        deleted_at     INTEGER,
+        updated_at     INTEGER NOT NULL
+      );
+
+      CREATE INDEX idx_albums_updated ON albums(updated_at);
+
+      CREATE TABLE album_items (
+        album_id   TEXT NOT NULL REFERENCES albums(id),
+        asset_id   TEXT NOT NULL REFERENCES assets(id),
+        added_at   INTEGER NOT NULL,
+        removed_at INTEGER,
+        updated_at INTEGER NOT NULL,
+        PRIMARY KEY (album_id, asset_id)
+      );
+
+      CREATE INDEX idx_album_items_updated ON album_items(updated_at);
+      CREATE INDEX idx_album_items_album   ON album_items(album_id);
+    `)
+  },
 ]
 
 function migrate(db) {
@@ -112,6 +149,9 @@ function migrate(db) {
   }
 }
 
+/** Tables that carry their own `updated_at` delta cursor (§9). */
+const CURSOR_TABLES = new Set(['assets', 'albums', 'album_items'])
+
 /**
  * A strictly increasing `updated_at` for the delta-sync cursor (§9).
  *
@@ -124,9 +164,14 @@ function migrate(db) {
  * Handing out max(now, highest + 1) keeps the column meaning what §8 says it
  * means while making ties impossible, so the published contract does not have
  * to change.
+ *
+ * Each stream counts on its own table: albums move far less often than assets,
+ * and sharing one counter would drag every album cursor forward on every upload.
  */
-export function nextUpdatedAt(db) {
-  const highest = db.prepare('SELECT MAX(updated_at) AS value FROM assets').get()?.value ?? 0
+export function nextUpdatedAt(db, table = 'assets') {
+  // The name is interpolated, so it may only ever come from this file.
+  if (!CURSOR_TABLES.has(table)) throw new Error(`No delta cursor for table ${table}`)
+  const highest = db.prepare(`SELECT MAX(updated_at) AS value FROM ${table}`).get()?.value ?? 0
   return Math.max(Date.now(), highest + 1)
 }
 

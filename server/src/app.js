@@ -1,5 +1,6 @@
 import Fastify from 'fastify'
 import { createAuthHook, createLoginLimiter } from './auth.js'
+import albumRoutes from './routes/albums.js'
 import assetRoutes from './routes/assets.js'
 import authRoutes from './routes/auth.js'
 import healthRoutes from './routes/health.js'
@@ -27,6 +28,7 @@ export async function buildApp({ db, logger = true } = {}) {
   await app.register(authRoutes, { prefix: '/api/v1', ...deps })
   await app.register(uploadRoutes, { prefix: '/api/v1', ...deps })
   await app.register(assetRoutes, { prefix: '/api/v1', ...deps })
+  await app.register(albumRoutes, { prefix: '/api/v1', ...deps })
 
   app.setNotFoundHandler((request, reply) => {
     reply.code(404).send({

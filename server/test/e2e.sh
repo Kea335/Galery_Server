@@ -315,7 +315,142 @@ check '  and the exact bytes come back' \
   "$(sha256sum "$TMP/again.bin" | cut -d' ' -f1)" "$SHA"
 
 # ─────────────────────────────────────────────────────────────────────────────
-section '10. Revoke (§13)'
+section '10. Albums (§16.6)'
+
+# Membership needs more than one photo to be worth paging, so plant three tiny
+# ones. Single chunk each — the chunking path is section 3's job, not this one's.
+upload_tiny() { # upload_tiny <name> -> echoes the asset id
+  local name=$1 size sha up
+  head -c 4096 /dev/urandom > "$TMP/$name.bin"
+  size=$(size_of "$TMP/$name.bin")
+  sha=$(sha256sum "$TMP/$name.bin" | cut -d' ' -f1)
+
+  authed POST /uploads -H 'Content-Type: application/json' -d "{
+    \"sha256\":\"$sha\",\"sizeBytes\":$size,\"filename\":\"$name.jpg\",
+    \"mimeType\":\"image/jpeg\",\"capturedAt\":1770000000000}" >/dev/null
+  up=$(body | jget data.uploadId)
+
+  authed PATCH "/uploads/$up" -H 'Content-Type: application/octet-stream' \
+    -H "Content-Range: bytes 0-$((size - 1))/$size" \
+    --data-binary @"$TMP/$name.bin" >/dev/null
+  authed POST "/uploads/$up/complete" >/dev/null
+  body | jget data.assetId
+}
+
+A1=$(upload_tiny alb1)
+A2=$(upload_tiny alb2)
+A3=$(upload_tiny alb3)
+if [ -n "$A1" ] && [ -n "$A2" ] && [ -n "$A3" ]; then
+  pass 'three assets planted for the album'
+else
+  fail 'three assets planted for the album'
+fi
+
+# Where the membership stream stands right now, so every check below can talk
+# about this run's rows rather than everything the dev database has ever held.
+album_items_tip() {
+  local cursor=0 more
+  while :; do
+    authed GET "/album-items?since=$cursor&limit=500" >/dev/null
+    more=$(body | jget data.hasMore)
+    cursor=$(body | jget data.nextCursor)
+    [ "$more" = 'true' ] || break
+  done
+  echo "$cursor"
+}
+ITEMS_TIP=$(album_items_tip)
+
+status=$(authed POST /albums -H 'Content-Type: application/json' -d '{"name":"Georgia 2024"}')
+check 'an album can be created' "$status" 201
+ALBUM=$(body | jget data.id)
+check '  with the name it was given' "$(body | jget data.name)" 'Georgia 2024'
+check '  and no cover yet' "$(body | jget data.coverAssetId)" ''
+
+status=$(authed POST /albums -H 'Content-Type: application/json' -d '{"name":"   "}')
+check 'a blank name is refused' "$status" 400
+
+status=$(authed POST "/albums/$ALBUM/items" -H 'Content-Type: application/json' \
+  -d "{\"assetIds\":[\"$A1\",\"$A2\",\"$A3\"]}")
+check 'photos can be added' "$status" 200
+check '  all three of them' "$(body | jget data.added)" 3
+
+status=$(authed POST "/albums/$ALBUM/items" -H 'Content-Type: application/json' \
+  -d "{\"assetIds\":[\"$A1\",\"does-not-exist\"]}")
+check 'an unknown asset is refused' "$status" 404
+check '  and it is named, so the client can fix it' "$(body | jget error.missing)" 'does-not-exist'
+
+status=$(authed GET '/albums?since=0&limit=10')
+check 'albums come back through delta sync' "$status" 200
+if grep -q "$ALBUM" "$TMP/body"; then pass '  with our album in it'; else fail '  with our album in it'; fi
+
+# The lesson the 10,000-asset soak taught, applied here before it can bite:
+# three rows written inside one request must still land on three distinct
+# cursor values, or paging one at a time drops the ones that shared a tick.
+#
+# Paging starts from where the stream stood before this run, not from zero: the
+# dev database keeps yesterday's albums, and starting at zero would walk those
+# instead and make the whole section depend on a clean disk.
+cursor=$ITEMS_TIP
+ids=''
+for _ in 1 2 3; do
+  authed GET "/album-items?since=$cursor&limit=1" >/dev/null
+  ids="$ids $(grep -o '"assetId":"[^"]*"' "$TMP/body" | head -1 | cut -d'"' -f4)"
+  cursor=$(body | jget data.nextCursor)
+done
+check 'paging membership one row at a time sees each exactly once' \
+  "$(echo $ids | tr ' ' '\n' | sort -u | grep -c .)" 3
+
+status=$(authed GET "/album-items?since=$cursor&limit=10")
+check '  and then the stream is exhausted' "$(body | jget data.hasMore)" false
+
+BEFORE_REMOVE=$cursor
+status=$(authed DELETE "/albums/$ALBUM/items/$A2")
+check 'a photo can be taken out' "$status" 200
+
+status=$(authed GET "/album-items?since=$BEFORE_REMOVE&limit=10")
+check '  the removal travels as a tombstone, not a silence' "$(body | jget data.items.0.removed)" true
+check '  naming which photo left' "$(body | jget data.items.0.assetId)" "$A2"
+
+status=$(authed POST "/albums/$ALBUM/items" -H 'Content-Type: application/json' \
+  -d "{\"assetIds\":[\"$A2\"]}")
+check 'putting it back works' "$status" 200
+status=$(authed GET "/album-items?since=$BEFORE_REMOVE&limit=10")
+if grep -q '"removed":false' "$TMP/body"; then
+  pass '  and clears the tombstone rather than failing on the key'
+else
+  fail '  and clears the tombstone rather than failing on the key'
+fi
+
+status=$(authed PATCH "/albums/$ALBUM" -H 'Content-Type: application/json' \
+  -d '{"name":"Georgia, spring"}')
+check 'an album can be renamed' "$status" 200
+check '  to the new name' "$(body | jget data.name)" 'Georgia, spring'
+
+status=$(authed PATCH "/albums/$ALBUM" -H 'Content-Type: application/json' \
+  -d "{\"coverAssetId\":\"$A1\"}")
+check 'a cover can be set' "$status" 200
+check '  to the chosen photo' "$(body | jget data.coverAssetId)" "$A1"
+
+status=$(authed PATCH "/albums/$ALBUM" -H 'Content-Type: application/json' \
+  -d '{"coverAssetId":"nope"}')
+check 'a cover that does not exist is refused' "$status" 404
+
+status=$(authed DELETE "/albums/$ALBUM")
+check 'an album can be deleted' "$status" 200
+check '  as a tombstone, like everything else here' "$(body | jget data.deleted)" true
+
+status=$(authed PATCH "/albums/$ALBUM" -H 'Content-Type: application/json' -d '{"name":"too late"}')
+check '  after which it cannot be edited' "$status" 410
+
+status=$(authed GET '/albums?since=0&limit=10')
+if grep -q '"deleted":true' "$TMP/body"; then
+  pass '  and the deletion reaches every phone through delta sync'
+else
+  fail '  and the deletion reaches every phone through delta sync'
+fi
+
+# ─────────────────────────────────────────────────────────────────────────────
+section '11. Revoke (§13)'
 
 status=$(authed POST /auth/revoke)
 check 'a device can revoke itself' "$status" 200

@@ -125,8 +125,8 @@ VERSION_BEFORE=$(node -e "
   const db = new DatabaseSync('$DATA/kadr.db');
   console.log(db.prepare('PRAGMA user_version').get().user_version);
 ")
-# v2 added accounts; bump this whenever a migration lands.
-check 'the schema records its version' "$VERSION_BEFORE" 2
+# v2 added accounts, v3 added albums; bump this whenever a migration lands.
+check 'the schema records its version' "$VERSION_BEFORE" 3
 
 stop_server
 start_server

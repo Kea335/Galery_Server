@@ -14,7 +14,7 @@ galery app/
 
 | # | Milestone | State |
 |---|---|---|
-| M1 | Server skeleton | **Done** — 61 curl checks green, plus a restart-mid-upload suite |
+| M1 | Server skeleton | **Done** — 94 curl checks green, plus hardening and restart-mid-upload suites |
 | M2 | Android index | **Done** — verified on an API 37 device: scan → Room → upload → byte-identical round trip |
 | M3 | Backup engine | **Nearly done** — loop, batched dedupe, retries, notification all working and tested; reboot-resume not signed off (see below) |
 | M4 | Gallery UI | **Done** — merged local+server timeline, month dividers, viewer with zoom, paging and drag-to-dismiss, shared-element transitions |
@@ -24,9 +24,9 @@ galery app/
 
 ## Verified so far
 
-- 61 `curl` checks against the live API: pairing, single-use codes, chunked
-  upload with resume, idempotent re-sends, hash mismatch, dedupe, `Range`
-  correctness, trash round trip, revocation.
+- 94 `curl` checks against the live API: sign-in, chunked upload with resume,
+  idempotent re-sends, hash mismatch, dedupe, `Range` correctness, trash round
+  trip, albums, revocation.
 - The server survives being killed mid-upload and resumes from the SQLite row
   and the partial file alone.
 - Peak server memory during a 256 MB upload: **83 MB RSS** (§15 budget: 300 MB).
@@ -89,8 +89,14 @@ the device token moved to a Keystore-backed wrapper of our own. Only the token i
 encrypted, and phones that were already paired migrate across without signing in
 again.
 
-Still open: disk capacity (§16.3), number of phones (§16.4), album model
-(§16.6).
+**§16.6, the album model, is decided**: manual albums, held on the server and
+shared by every phone that signs in — the same shape §16 already gave the
+library. Mirroring phone folders was considered and dropped: `relativePath`
+never reaches the server, old assets could never be backfilled, and a photo
+whose local copy had been freed would vanish from its folder. The server half is
+built; the Android half is not.
+
+Still open: disk capacity (§16.3), number of phones (§16.4).
 
 ## Getting started
 
