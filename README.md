@@ -46,7 +46,7 @@ galery app/
   with a 29-day countdown, and restoring it from the phone empties the trash.
 - **10,000 assets uploaded through the real API in 41 s**, peak server memory
   184 MB against the 300 MB budget, full delta sync of the library in 144 ms.
-- A v1 database survives the upgrade to v2 and v3 with its rows intact.
+- A v1 database survives the upgrade to v2, v3 and v4 with its rows intact.
 - The timeline is read a page at a time, and paging a library full of photos
   that share a capture time shows every one of them exactly once — the case
   where a `LIMIT/OFFSET` window silently drops or repeats rows.
@@ -93,8 +93,9 @@ again.
 shared by every phone that signs in — the same shape §16 already gave the
 library. Mirroring phone folders was considered and dropped: `relativePath`
 never reaches the server, old assets could never be backfilled, and a photo
-whose local copy had been freed would vanish from its folder. The server half is
-built; the Android half is not.
+whose local copy had been freed would vanish from its folder. Both halves are
+built: the server holds the albums, and the app mirrors them over two delta
+streams of their own.
 
 Still open: disk capacity (§16.3), number of phones (§16.4).
 

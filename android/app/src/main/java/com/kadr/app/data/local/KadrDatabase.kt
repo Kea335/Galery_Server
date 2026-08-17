@@ -7,15 +7,16 @@ import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
 
 @Database(
-    entities = [LocalAsset::class, RemoteAsset::class],
+    entities = [LocalAsset::class, RemoteAsset::class, RemoteAlbum::class, AlbumItem::class],
     views = [GalleryItem::class],
-    version = 3,
+    version = 4,
     exportSchema = true,
 )
 @TypeConverters(Converters::class)
 abstract class KadrDatabase : RoomDatabase() {
     abstract fun assets(): LocalAssetDao
     abstract fun gallery(): GalleryDao
+    abstract fun albums(): AlbumDao
 
     companion object {
         /** v2 adds the mirror of the server library that the timeline reads. */
@@ -62,6 +63,44 @@ abstract class KadrDatabase : RoomDatabase() {
                 // character for character, and it trims the annotation value
                 // first. A stray leading newline here fails to open the database.
                 db.execSQL("CREATE VIEW `timeline_items` AS ${TIMELINE_VIEW_SQL.trim()}")
+            }
+        }
+
+        /**
+         * v4 mirrors the server's albums (§16.6). Both tables are caches of what
+         * the server holds, so they start empty and the next delta sync fills
+         * them — nothing here has to be preserved or invented.
+         */
+        val MIGRATION_3_4 = object : Migration(3, 4) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    """
+                    CREATE TABLE IF NOT EXISTS `remote_albums` (
+                        `id` TEXT NOT NULL,
+                        `name` TEXT NOT NULL,
+                        `coverAssetId` TEXT,
+                        `createdAt` INTEGER NOT NULL,
+                        `deleted` INTEGER NOT NULL,
+                        `updatedAt` INTEGER NOT NULL,
+                        PRIMARY KEY(`id`)
+                    )
+                    """.trimIndent(),
+                )
+
+                db.execSQL(
+                    """
+                    CREATE TABLE IF NOT EXISTS `album_items` (
+                        `albumId` TEXT NOT NULL,
+                        `assetId` TEXT NOT NULL,
+                        `addedAt` INTEGER NOT NULL,
+                        `removed` INTEGER NOT NULL,
+                        `updatedAt` INTEGER NOT NULL,
+                        PRIMARY KEY(`albumId`, `assetId`)
+                    )
+                    """.trimIndent(),
+                )
+                db.execSQL("CREATE INDEX IF NOT EXISTS `index_album_items_albumId` ON `album_items` (`albumId`)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS `index_album_items_assetId` ON `album_items` (`assetId`)")
             }
         }
     }

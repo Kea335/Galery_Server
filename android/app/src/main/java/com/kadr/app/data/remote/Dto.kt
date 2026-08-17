@@ -103,6 +103,72 @@ data class AssetListResponse(
     val hasMore: Boolean = false,
 )
 
+/**
+ * Albums (§16.6). Two delta streams rather than one: albums and membership move
+ * at completely different rates, and the server keeps a separate cursor for each.
+ */
+@Serializable
+data class AlbumDto(
+    val id: String,
+    val name: String = "",
+    val coverAssetId: String? = null,
+    val createdAt: Long = 0,
+    val deleted: Boolean = false,
+    val updatedAt: Long = 0,
+)
+
+@Serializable
+data class AlbumListResponse(
+    val albums: List<AlbumDto> = emptyList(),
+    val nextCursor: Long = 0,
+    val hasMore: Boolean = false,
+)
+
+@Serializable
+data class AlbumItemDto(
+    val albumId: String,
+    val assetId: String,
+    val addedAt: Long = 0,
+    /** True once the photo has been taken out; the row itself is never dropped. */
+    val removed: Boolean = false,
+    val removedAt: Long? = null,
+    val updatedAt: Long = 0,
+)
+
+@Serializable
+data class AlbumItemListResponse(
+    val items: List<AlbumItemDto> = emptyList(),
+    val nextCursor: Long = 0,
+    val hasMore: Boolean = false,
+)
+
+@Serializable
+data class AlbumDeletedResponse(
+    val id: String = "",
+    val deleted: Boolean = false,
+    val deletedAt: Long? = null,
+)
+
+@Serializable
+data class AlbumItemRemovedResponse(
+    val albumId: String = "",
+    val assetId: String = "",
+    val removed: Boolean = false,
+    val removedAt: Long? = null,
+)
+
+@Serializable
+data class CreateAlbumRequest(val name: String)
+
+@Serializable
+data class RenameAlbumRequest(val name: String)
+
+@Serializable
+data class AddAlbumItemsRequest(val assetIds: List<String>)
+
+@Serializable
+data class AddAlbumItemsResponse(val albumId: String = "", val added: Int = 0)
+
 @Serializable
 data class TrashListResponse(
     val assets: List<TrashedAssetDto> = emptyList(),

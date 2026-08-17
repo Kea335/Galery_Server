@@ -20,6 +20,8 @@ import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.kadr.app.data.prefs.KadrSettings
 import com.kadr.app.data.prefs.SettingsStore
+import com.kadr.app.ui.albums.AlbumDetailScreen
+import com.kadr.app.ui.albums.AlbumsScreen
 import com.kadr.app.ui.debug.DebugScreen
 import com.kadr.app.ui.gallery.GalleryViewModel
 import com.kadr.app.ui.gallery.TimelineScreen
@@ -37,6 +39,10 @@ object Routes {
     const val BACKUP = "backup"
     const val SETTINGS = "settings"
     const val TRASH = "trash"
+    const val ALBUMS = "albums"
+    const val ALBUM = "albums/{id}/{name}"
+
+    fun album(id: String, name: String) = "albums/$id/${Uri.encode(name)}"
     /**
      * The photo itself, not its position. A position taken from a partly loaded
      * timeline would point somewhere else as soon as more of it was read; the
@@ -93,6 +99,7 @@ fun KadrApp() {
                         navController.navigate(Routes.viewer(item.key, item.capturedAt))
                     },
                     onOpenBackup = { navController.navigate(Routes.BACKUP) },
+                    onOpenAlbums = { navController.navigate(Routes.ALBUMS) },
                 )
             }
 
@@ -138,6 +145,27 @@ fun KadrApp() {
 
             composable(Routes.TRASH) {
                 TrashScreen(onBack = { navController.popBackStack() })
+            }
+
+            composable(Routes.ALBUMS) {
+                AlbumsScreen(
+                    onBack = { navController.popBackStack() },
+                    onOpenAlbum = { id, name -> navController.navigate(Routes.album(id, name)) },
+                )
+            }
+
+            composable(
+                route = Routes.ALBUM,
+                arguments = listOf(
+                    navArgument("id") { type = NavType.StringType },
+                    navArgument("name") { type = NavType.StringType },
+                ),
+            ) { backStackEntry ->
+                AlbumDetailScreen(
+                    albumId = backStackEntry.arguments?.getString("id").orEmpty(),
+                    albumName = backStackEntry.arguments?.getString("name").orEmpty(),
+                    onBack = { navController.popBackStack() },
+                )
             }
         }
     }

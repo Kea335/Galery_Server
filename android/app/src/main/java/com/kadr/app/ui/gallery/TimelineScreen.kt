@@ -44,8 +44,10 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.DeleteSweep
+import androidx.compose.material.icons.filled.LibraryAdd
 import androidx.compose.material.icons.filled.RadioButtonUnchecked
 import androidx.compose.material.icons.filled.CloudOff
+import androidx.compose.material.icons.filled.PhotoAlbum
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.AlertDialog
@@ -78,6 +80,7 @@ import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
+import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.media3.common.MediaItem
 import androidx.media3.common.Player
@@ -90,6 +93,7 @@ import androidx.paging.compose.itemKey
 import coil3.compose.AsyncImage
 import com.kadr.app.data.local.GalleryItem
 import com.kadr.app.data.repo.ServerFull
+import com.kadr.app.ui.albums.AlbumsViewModel
 import com.kadr.app.ui.formatBytes
 import com.kadr.app.ui.formatDuration
 import com.kadr.app.ui.rememberHaptics
@@ -109,7 +113,9 @@ fun SharedTransitionScope.TimelineScreen(
     animatedVisibilityScope: AnimatedVisibilityScope,
     onOpenPhoto: (item: GalleryItem) -> Unit,
     onOpenBackup: () -> Unit,
+    onOpenAlbums: () -> Unit,
 ) {
+    val albumsViewModel: AlbumsViewModel = hiltViewModel()
     val entries = viewModel.entries.collectAsLazyPagingItems()
     val photoCount by viewModel.photoCount.collectAsStateWithLifecycle()
     val selection by viewModel.selection.collectAsStateWithLifecycle()
@@ -122,6 +128,7 @@ fun SharedTransitionScope.TimelineScreen(
     val serverFull by viewModel.serverFull.collectAsStateWithLifecycle()
 
     val selecting = selection.isNotEmpty()
+    var choosingAlbum by remember { mutableStateOf(false) }
 
     val gridState = rememberLazyGridState()
     val snackbarHostState = remember { SnackbarHostState() }
@@ -289,6 +296,7 @@ fun SharedTransitionScope.TimelineScreen(
                     count = selection.size,
                     busy = busy,
                     onClose = viewModel::clearSelection,
+                    onAddToAlbum = { choosingAlbum = true },
                     onFreeUp = viewModel::prepareFreeUp,
                     modifier = Modifier.onSizeChanged { chromeHeight = it.height },
                 )
@@ -300,6 +308,7 @@ fun SharedTransitionScope.TimelineScreen(
                     backupFraction = progress?.overallFraction,
                     serverFull = serverFull,
                     onOpenBackup = onOpenBackup,
+                    onOpenAlbums = onOpenAlbums,
                     modifier = Modifier.onSizeChanged { chromeHeight = it.height },
                 )
             }
@@ -375,6 +384,60 @@ fun SharedTransitionScope.TimelineScreen(
             },
         )
     }
+
+    if (choosingAlbum) {
+        AlbumPicker(
+            selectionSize = selection.size,
+            onDismiss = { choosingAlbum = false },
+            onChosen = { albumId ->
+                choosingAlbum = false
+                albumsViewModel.addToAlbum(albumId, selection) { viewModel.clearSelection() }
+            },
+        )
+    }
+}
+
+/**
+ * Which album the picked photos should go into.
+ *
+ * Empty-handed on purpose when there are no albums yet: sending someone to the
+ * albums screen to make one is clearer than a dialog that offers nothing.
+ */
+@Composable
+private fun AlbumPicker(
+    selectionSize: Int,
+    onDismiss: () -> Unit,
+    onChosen: (String) -> Unit,
+    albumsViewModel: AlbumsViewModel = hiltViewModel(),
+) {
+    val albums by albumsViewModel.list.collectAsStateWithLifecycle()
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = {
+            Text(if (selectionSize == 1) "Add 1 photo to…" else "Add $selectionSize photos to…")
+        },
+        text = {
+            if (albums.isEmpty()) {
+                Text("No albums yet. Make one from the albums screen first.")
+            } else {
+                Column {
+                    albums.forEach { album ->
+                        Text(
+                            text = "${album.name}  ·  ${album.itemCount}",
+                            style = MaterialTheme.typography.bodyLarge,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable { onChosen(album.id) }
+                                .padding(vertical = 12.dp),
+                        )
+                    }
+                }
+            }
+        },
+        confirmButton = {},
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
+    )
 }
 
 /**
@@ -389,6 +452,7 @@ private fun SelectionChrome(
     count: Int,
     busy: Boolean,
     onClose: () -> Unit,
+    onAddToAlbum: () -> Unit,
     onFreeUp: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -426,6 +490,13 @@ private fun SelectionChrome(
                     .padding(end = 4.dp),
             )
         } else {
+            IconButton(onClick = onAddToAlbum) {
+                Icon(
+                    imageVector = Icons.Default.LibraryAdd,
+                    contentDescription = "Add to an album",
+                    tint = MaterialTheme.colorScheme.onSurface,
+                )
+            }
             IconButton(onClick = onFreeUp) {
                 Icon(
                     imageVector = Icons.Default.DeleteSweep,
@@ -445,6 +516,7 @@ private fun TopChrome(
     backupFraction: Float?,
     serverFull: ServerFull?,
     onOpenBackup: () -> Unit,
+    onOpenAlbums: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     Column(
@@ -473,6 +545,14 @@ private fun TopChrome(
                     strokeWidth = 2.dp,
                     color = KadrAmber,
                     modifier = Modifier.size(18.dp),
+                )
+            }
+
+            IconButton(onClick = onOpenAlbums) {
+                Icon(
+                    imageVector = Icons.Default.PhotoAlbum,
+                    contentDescription = "Albums",
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
 

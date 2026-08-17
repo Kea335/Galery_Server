@@ -27,6 +27,13 @@ data class KadrSettings(
     /** Delta-sync cursor for the server library (§9). */
     val librarySince: Long = 0,
 
+    /**
+     * Albums and their membership are two separate streams on the server, each
+     * with its own counter, so they need two cursors here (§16.6).
+     */
+    val albumsSince: Long = 0,
+    val albumItemsSince: Long = 0,
+
     /** §11 — media cache, 512 MB by default. */
     val videoCacheMb: Int = 512,
 
@@ -76,6 +83,8 @@ class SettingsStore @Inject constructor(
         includeVideos = prefs.getBoolean(KEY_INCLUDE_VIDEOS, true),
         maxVideoMb = prefs.getInt(KEY_MAX_VIDEO_MB, 0),
         librarySince = prefs.getLong(KEY_LIBRARY_SINCE, 0),
+        albumsSince = prefs.getLong(KEY_ALBUMS_SINCE, 0),
+        albumItemsSince = prefs.getLong(KEY_ALBUM_ITEMS_SINCE, 0),
         videoCacheMb = prefs.getInt(KEY_VIDEO_CACHE_MB, 512),
         dynamicColor = prefs.getBoolean(KEY_DYNAMIC_COLOR, false),
     )
@@ -102,6 +111,10 @@ class SettingsStore @Inject constructor(
 
     fun saveLibrarySince(value: Long) = edit { putLong(KEY_LIBRARY_SINCE, value) }
 
+    fun saveAlbumsSince(value: Long) = edit { putLong(KEY_ALBUMS_SINCE, value) }
+
+    fun saveAlbumItemsSince(value: Long) = edit { putLong(KEY_ALBUM_ITEMS_SINCE, value) }
+
     fun setVideoCacheMb(value: Int) = edit { putInt(KEY_VIDEO_CACHE_MB, value.coerceIn(64, 8192)) }
 
     fun setDynamicColor(enabled: Boolean) = edit { putBoolean(KEY_DYNAMIC_COLOR, enabled) }
@@ -116,6 +129,8 @@ class SettingsStore @Inject constructor(
             remove(KEY_DEVICE_ID)
             remove(KEY_TOKEN)
             remove(KEY_LIBRARY_SINCE)
+            remove(KEY_ALBUMS_SINCE)
+            remove(KEY_ALBUM_ITEMS_SINCE)
         }
         // Throwing the key away as well means a stray copy of the old ciphertext
         // — a backup taken by some other tool, an undeleted disk page — cannot be
@@ -144,6 +159,8 @@ class SettingsStore @Inject constructor(
         const val KEY_INCLUDE_VIDEOS = "include_videos"
         const val KEY_MAX_VIDEO_MB = "max_video_mb"
         const val KEY_LIBRARY_SINCE = "library_since"
+        const val KEY_ALBUMS_SINCE = "albums_since"
+        const val KEY_ALBUM_ITEMS_SINCE = "album_items_since"
         const val KEY_VIDEO_CACHE_MB = "video_cache_mb"
         const val KEY_DYNAMIC_COLOR = "dynamic_color"
     }

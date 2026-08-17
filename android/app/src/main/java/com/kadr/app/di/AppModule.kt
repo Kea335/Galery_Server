@@ -3,6 +3,7 @@ package com.kadr.app.di
 import android.content.Context
 import androidx.media3.datasource.cache.SimpleCache
 import androidx.room.Room
+import com.kadr.app.data.local.AlbumDao
 import com.kadr.app.data.local.GalleryDao
 import com.kadr.app.data.local.KadrDatabase
 import com.kadr.app.data.local.LocalAssetDao
@@ -23,7 +24,11 @@ object AppModule {
     @Singleton
     fun provideDatabase(@ApplicationContext context: Context): KadrDatabase =
         Room.databaseBuilder(context, KadrDatabase::class.java, "kadr.db")
-            .addMigrations(KadrDatabase.MIGRATION_1_2, KadrDatabase.MIGRATION_2_3)
+            .addMigrations(
+                KadrDatabase.MIGRATION_1_2,
+                KadrDatabase.MIGRATION_2_3,
+                KadrDatabase.MIGRATION_3_4,
+            )
             .build()
 
     @Provides
@@ -31,6 +36,9 @@ object AppModule {
 
     @Provides
     fun provideGalleryDao(database: KadrDatabase): GalleryDao = database.gallery()
+
+    @Provides
+    fun provideAlbumDao(database: KadrDatabase): AlbumDao = database.albums()
 
     /** The app's one media cache; tests open their own folder instead. */
     @Provides

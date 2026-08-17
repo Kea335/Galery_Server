@@ -42,6 +42,49 @@ interface KadrApi {
     @POST("api/v1/assets/{id}/restore")
     suspend fun restoreAsset(@Path("id") id: String): Envelope<RemoteAssetDto>
 
+    // ─── Albums (§16.6) ─────────────────────────────────────────────────────
+
+    @GET("api/v1/albums")
+    suspend fun albums(
+        @Query("since") since: Long,
+        @Query("limit") limit: Int = 500,
+    ): Envelope<AlbumListResponse>
+
+    /**
+     * Membership, as its own stream. Renaming an album must not drag five
+     * thousand membership rows across the wire, so the server keeps them apart.
+     */
+    @GET("api/v1/album-items")
+    suspend fun albumItems(
+        @Query("since") since: Long,
+        @Query("limit") limit: Int = 500,
+    ): Envelope<AlbumItemListResponse>
+
+    @POST("api/v1/albums")
+    suspend fun createAlbum(@Body body: CreateAlbumRequest): Envelope<AlbumDto>
+
+    @PATCH("api/v1/albums/{id}")
+    suspend fun renameAlbum(
+        @Path("id") id: String,
+        @Body body: RenameAlbumRequest,
+    ): Envelope<AlbumDto>
+
+    @DELETE("api/v1/albums/{id}")
+    suspend fun deleteAlbum(@Path("id") id: String): Envelope<AlbumDeletedResponse>
+
+    /** Max 500 per request, same cap as §9's check endpoint. */
+    @POST("api/v1/albums/{id}/items")
+    suspend fun addAlbumItems(
+        @Path("id") id: String,
+        @Body body: AddAlbumItemsRequest,
+    ): Envelope<AddAlbumItemsResponse>
+
+    @DELETE("api/v1/albums/{id}/items/{assetId}")
+    suspend fun removeAlbumItem(
+        @Path("id") id: String,
+        @Path("assetId") assetId: String,
+    ): Envelope<AlbumItemRemovedResponse>
+
     /** Always call this before uploading (§10.3). Max 500 hashes. */
     @POST("api/v1/assets/check")
     suspend fun check(@Body body: CheckRequest): Envelope<CheckResponse>

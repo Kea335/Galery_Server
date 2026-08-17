@@ -52,7 +52,7 @@ certificate on the phone; release builds do not.
 ```
 app/src/main/java/com/kadr/app/
 ├── data/
-│   ├── local/     Room: LocalAsset, the §8 state machine, DAO, timeline view
+│   ├── local/     Room: LocalAsset, the §8 state machine, DAO, timeline view, albums
 │   ├── media/     MediaStoreScanner, Sha256Hasher
 │   ├── prefs/     SettingsStore, KeystoreCipher (the token at rest)
 │   ├── remote/    Retrofit API, DTOs, ChunkRequestBody, error mapping
@@ -139,6 +139,34 @@ route carries the item key and the viewer asks the database where that key sits
 pager keeps placeholders **on** — it opens at page 4,000 without having read
 anything around it. The grid keeps them off, because separators cannot decide
 where a month begins when the rows either side are null.
+
+## Albums (§16.6)
+
+Albums belong to the server, so this side is a mirror plus a way to ask the
+server to change: `remote_albums` and `album_items`, filled by two delta streams
+of their own. Every edit — create, rename, delete, add, remove — goes to the
+server first and syncs back rather than writing locally and hoping. Two phones
+share these albums, and a local guess the server refused would show one of them
+something untrue.
+
+An album's contents are a **local join**, not a request: the library is mirrored
+already and membership arrives on its own stream, so `AlbumDao.pagingAlbum()` is
+the timeline view with a join in front of it. That means it inherits the
+timeline's hazard and its fix — `ORDER BY capturedAt DESC, itemKey DESC`, because
+a page is a `LIMIT/OFFSET` window and a burst of shots shares a capture time. A
+burst is exactly what someone puts in an album, so `AlbumPagingTest` stacks ties
+across every page boundary.
+
+Two consequences worth stating out loud:
+
+- **A photo that is not backed up yet cannot go in an album.** The album is a
+  server-side relationship and the server has never seen that file.
+  `addByKeys` counts those and the message says how many were left behind,
+  because "12 added" when three were dropped is the kind of small lie that makes
+  people stop trusting the app.
+- **Removing from an album deletes nothing**, and the wording in the dialogs says
+  so. Deleting an album deletes no photos either. Freeing local space does not
+  change membership at all — the server still holds the file.
 
 ## The device token at rest (§6, §13)
 
@@ -324,6 +352,10 @@ touch targets are in `ui/Haptics.kt` and `ui/theme/Theme.kt`.
   on a device; the timeline is paged now (see below), but the number itself is
   still unverified.
 - §12's right-edge fast scrubber is still not built.
+- The album screens have **not been looked at** either, for the same reason as
+  selection mode: an instrumentation run uninstalls the app afterwards. The data
+  layer is tested; the list, the detail grid and the picker are unproven on a
+  screen.
 - Selection mode is built and its repository half is tested, but **nothing has
   looked at it**. The tick, the picked-cell inset and the selection bar have
   never been on a screen: an instrumentation run uninstalls the app afterwards,
