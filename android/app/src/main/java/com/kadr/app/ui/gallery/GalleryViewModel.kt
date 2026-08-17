@@ -5,6 +5,10 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import androidx.paging.PagingData
+import androidx.paging.cachedIn
+import androidx.paging.insertSeparators
+import androidx.paging.map
 import com.kadr.app.backup.BackupScheduler
 import com.kadr.app.data.local.GalleryItem
 import com.kadr.app.data.prefs.KadrSettings
@@ -15,6 +19,7 @@ import com.kadr.app.data.repo.LibraryRepository
 import com.kadr.app.data.repo.ServerFull
 import com.kadr.app.data.video.PlayerFactory
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -45,14 +50,26 @@ class GalleryViewModel @Inject constructor(
     settingsStore: SettingsStore,
 ) : ViewModel() {
 
-    /** Flat, newest first — the order the viewer pages through. */
-    val photos: StateFlow<List<GalleryItem>> = library.observeTimeline()
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+    /**
+     * The grid: photos with month dividers folded in, a page at a time.
+     *
+     * `cachedIn` is what keeps a rotation — or a trip into the viewer and back —
+     * from throwing away every page and reading them all again.
+     */
+    val entries: Flow<PagingData<TimelineEntry>> = library.timelinePages()
+        .map { page ->
+            page.map<GalleryItem, TimelineEntry>(TimelineEntry::Photo)
+                .insertSeparators { before, after -> monthHeaderBetween(before, after) }
+        }
+        .cachedIn(viewModelScope)
 
-    /** The same list with month dividers folded in. */
-    val entries: StateFlow<List<TimelineEntry>> = library.observeTimeline()
-        .map(::withMonthHeaders)
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+    /** Flat, newest first — the order the viewer pages through. */
+    val photos: Flow<PagingData<GalleryItem>> = library.viewerPages()
+        .cachedIn(viewModelScope)
+
+    /** For the header line; counting rows is far cheaper than loading them. */
+    val photoCount: StateFlow<Int> = library.observeTimelineCount()
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), 0)
 
     val settings: StateFlow<KadrSettings> = settingsStore.settings
     val syncing: StateFlow<Boolean> = library.syncing
@@ -93,6 +110,14 @@ class GalleryViewModel @Inject constructor(
         _message.value = "Backup queued."
     }
 
+    /**
+     * Where a photo sits in the timeline, asked of the database rather than of
+     * the loaded pages — the viewer can be opened on a photo whose neighbours
+     * have never been read.
+     */
+    suspend fun positionOf(key: String, capturedAt: Long): Int =
+        library.positionOf(key, capturedAt)
+
     /** What Coil should load for a cell: the local file if we still have it. */
     fun thumbnailModel(item: GalleryItem): Any? =
         item.localUri ?: item.remoteId?.let(library::thumbnailUrl)
@@ -107,27 +132,30 @@ class GalleryViewModel @Inject constructor(
     fun mediaUri(item: GalleryItem): String? =
         item.localUri ?: item.remoteId?.let(library::fileUrl)
 
-    private fun withMonthHeaders(items: List<GalleryItem>): List<TimelineEntry> {
-        if (items.isEmpty()) return emptyList()
+    /**
+     * A divider goes between two photos when the month changes, and above the
+     * first photo of all. `after == null` is the end of the list, which needs no
+     * divider — the months are already behind us.
+     */
+    private fun monthHeaderBetween(
+        before: TimelineEntry?,
+        after: TimelineEntry?,
+    ): TimelineEntry.MonthHeader? {
+        val next = (after as? TimelineEntry.Photo)?.item ?: return null
+        val nextMonth = next.month()
 
+        val previous = (before as? TimelineEntry.Photo)?.item
+        if (previous != null && previous.month() == nextMonth) return null
+
+        // Drop the year for the current one — a magazine does not repeat it on
+        // every spread either.
         val zone = ZoneId.systemDefault()
-        val thisYear = YearMonth.now(zone).year
-        val out = ArrayList<TimelineEntry>(items.size + 16)
-        var current: YearMonth? = null
-
-        for (item in items) {
-            val month = YearMonth.from(Instant.ofEpochMilli(item.capturedAt).atZone(zone))
-            if (month != current) {
-                // Drop the year for the current one — a magazine does not repeat
-                // it on every spread either.
-                val pattern = if (month.year == thisYear) MONTH_ONLY else MONTH_AND_YEAR
-                out += TimelineEntry.MonthHeader(month, pattern.format(month))
-                current = month
-            }
-            out += TimelineEntry.Photo(item)
-        }
-        return out
+        val pattern = if (nextMonth.year == YearMonth.now(zone).year) MONTH_ONLY else MONTH_AND_YEAR
+        return TimelineEntry.MonthHeader(nextMonth, pattern.format(nextMonth))
     }
+
+    private fun GalleryItem.month(): YearMonth =
+        YearMonth.from(Instant.ofEpochMilli(capturedAt).atZone(ZoneId.systemDefault()))
 
     private companion object {
         val COLUMN_STEPS = listOf(2, 3, 5)

@@ -14,10 +14,11 @@ import org.junit.runner.RunWith
 /**
  * §14 M7 asks for database migration tests.
  *
- * The one that exists so far is v1 → v2, which adds the mirror of the server
- * library. What has to hold is that a phone which was backing up under v1 keeps
- * every row it had: an index that survives an app update is the difference
- * between a quiet upgrade and re-uploading someone's whole library.
+ * v1 → v2 adds the mirror of the server library; v2 → v3 adds the timeline
+ * view the paged reader is built on. What has to hold across both is that a
+ * phone which was backing up under v1 keeps every row it had: an index that
+ * survives an app update is the difference between a quiet upgrade and
+ * re-uploading someone's whole library.
  */
 @RunWith(AndroidJUnit4::class)
 class MigrationTest {
@@ -51,9 +52,10 @@ class MigrationTest {
 
         val migrated = helper.runMigrationsAndValidate(
             DB_NAME,
-            2,
+            3,
             true,
             KadrDatabase.MIGRATION_1_2,
+            KadrDatabase.MIGRATION_2_3,
         )
 
         migrated.query("SELECT filename, state, remoteId FROM local_assets WHERE id = 1").use { row ->
@@ -69,6 +71,15 @@ class MigrationTest {
             assertTrue(row.moveToFirst())
             assertEquals(0, row.getInt(0))
         }
+
+        // v3's view has to be there and has to see the row that came from v1 —
+        // the timeline is read entirely through it now.
+        migrated.query("SELECT itemKey, filename FROM timeline_items").use { row ->
+            assertTrue("The v3 view is missing", row.moveToFirst())
+            assertEquals("l1", row.getString(0))
+            assertEquals("holiday.jpg", row.getString(1))
+            assertEquals("One local row should surface exactly once", 1, row.count)
+        }
         migrated.close()
     }
 
@@ -79,11 +90,17 @@ class MigrationTest {
     @Test
     fun the_app_can_open_the_migrated_database() {
         helper.createDatabase(DB_NAME, 1).close()
-        helper.runMigrationsAndValidate(DB_NAME, 2, true, KadrDatabase.MIGRATION_1_2).close()
+        helper.runMigrationsAndValidate(
+            DB_NAME,
+            3,
+            true,
+            KadrDatabase.MIGRATION_1_2,
+            KadrDatabase.MIGRATION_2_3,
+        ).close()
 
         val context = InstrumentationRegistry.getInstrumentation().targetContext
         val database = Room.databaseBuilder(context, KadrDatabase::class.java, DB_NAME)
-            .addMigrations(KadrDatabase.MIGRATION_1_2)
+            .addMigrations(KadrDatabase.MIGRATION_1_2, KadrDatabase.MIGRATION_2_3)
             .build()
 
         try {

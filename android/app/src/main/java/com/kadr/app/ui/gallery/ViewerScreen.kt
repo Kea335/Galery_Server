@@ -51,6 +51,7 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.paging.compose.collectAsLazyPagingItems
 import coil3.compose.AsyncImage
 import com.kadr.app.data.local.GalleryItem
 import com.kadr.app.ui.formatBytes
@@ -75,18 +76,37 @@ private val CAPTION_FORMAT: DateTimeFormatter =
 fun SharedTransitionScope.ViewerScreen(
     viewModel: GalleryViewModel,
     animatedVisibilityScope: AnimatedVisibilityScope,
-    startIndex: Int,
+    startKey: String,
+    startCapturedAt: Long,
     onClose: () -> Unit,
 ) {
-    val photos by viewModel.photos.collectAsStateWithLifecycle()
-    if (photos.isEmpty()) {
+    val photos = viewModel.photos.collectAsLazyPagingItems()
+
+    // Which page the tapped photo is on is a question for the database: the
+    // pages around it may never have been read. Until the answer arrives there
+    // is nothing to page through, so the pager is not built at all — building it
+    // at 0 first would flash the newest photo before jumping.
+    var startIndex by remember(startKey) { mutableStateOf<Int?>(null) }
+    LaunchedEffect(startKey) {
+        startIndex = viewModel.positionOf(startKey, startCapturedAt)
+    }
+
+    val start = startIndex
+    if (start == null) {
+        Box(modifier = Modifier.fillMaxSize().background(Color.Black))
+        return
+    }
+    if (start < 0) {
+        // Deleted between the tap and the query.
         LaunchedEffect(Unit) { onClose() }
         return
     }
 
     val pagerState = rememberPagerState(
-        initialPage = startIndex.coerceIn(0, photos.lastIndex),
-        pageCount = { photos.size },
+        initialPage = start,
+        // Placeholders are on for this pager, so the count is the whole library
+        // from the first frame and page `start` exists before it is loaded.
+        pageCount = { photos.itemCount },
     )
 
     var chromeVisible by remember { mutableStateOf(true) }
@@ -110,7 +130,7 @@ fun SharedTransitionScope.ViewerScreen(
         label = "viewerDim",
     )
 
-    val current = photos.getOrNull(pagerState.currentPage)
+    val current = photos.peek(pagerState.currentPage)
 
     Box(
         modifier = Modifier
@@ -122,7 +142,9 @@ fun SharedTransitionScope.ViewerScreen(
             pageSpacing = 16.dp,
             modifier = Modifier.fillMaxSize(),
         ) { page ->
-            val item = photos[page]
+            // Null while that page is still being read — the pager knows the
+            // photo is there, just not yet what it is.
+            val item = photos[page] ?: return@HorizontalPager
             val mediaUri = viewModel.mediaUri(item)
 
             if (item.isVideo && mediaUri != null) {

@@ -46,7 +46,10 @@ galery app/
   with a 29-day countdown, and restoring it from the phone empties the trash.
 - **10,000 assets uploaded through the real API in 41 s**, peak server memory
   184 MB against the 300 MB budget, full delta sync of the library in 144 ms.
-- A v1 database survives the upgrade to v2 with its rows intact.
+- A v1 database survives the upgrade to v2 and v3 with its rows intact.
+- The timeline is read a page at a time, and paging a library full of photos
+  that share a capture time shows every one of them exactly once — the case
+  where a `LIMIT/OFFSET` window silently drops or repeats rows.
 
 ## What the soak caught
 

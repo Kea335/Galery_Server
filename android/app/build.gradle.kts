@@ -91,7 +91,13 @@ dependencies {
 
     implementation(libs.room.runtime)
     implementation(libs.room.ktx)
+    implementation(libs.room.paging)
     ksp(libs.room.compiler)
+
+    // §15: the timeline is read a page at a time, so a 10,000-photo library
+    // costs the same to open as a 200-photo one.
+    implementation(libs.paging.runtime)
+    implementation(libs.paging.compose)
 
     implementation(libs.hilt.android)
     ksp(libs.hilt.compiler)
@@ -125,4 +131,5 @@ dependencies {
     // §17's five failure cases need a server that can be told to misbehave.
     androidTestImplementation(libs.okhttp.mockwebserver)
     androidTestImplementation(libs.room.testing)
+    androidTestImplementation(libs.paging.testing)
 }

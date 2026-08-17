@@ -1,5 +1,6 @@
 package com.kadr.app.data.local
 
+import androidx.paging.PagingSource
 import androidx.room.Dao
 import androidx.room.Insert
 import androidx.room.OnConflictStrategy
@@ -10,56 +11,44 @@ import kotlinx.coroutines.flow.Flow
 interface GalleryDao {
 
     /**
-     * Local and server rows merged into one stream, newest first (§12).
+     * One page of the timeline, newest first (§12).
      *
-     * A photo that exists on both sides appears once: the local row wins,
-     * because it can be shown instantly from disk. Server rows only surface when
-     * no local file has the same hash — which is exactly the "freed up space"
-     * and "photos from another phone" case.
+     * The order has to be **total**, not just "by date": a page is a LIMIT/OFFSET
+     * window, so two rows the database is free to return in either order would
+     * let a photo appear on two pages or on none. `itemKey` breaks every tie and
+     * is unique by construction, which makes the window deterministic.
+     */
+    @Query("SELECT * FROM timeline_items ORDER BY capturedAt DESC, itemKey DESC")
+    fun pagingTimeline(): PagingSource<Int, GalleryItem>
+
+    /**
+     * How many photos there are, for the header count. Cheap next to loading
+     * them: SQLite counts rows without building a single [GalleryItem].
+     */
+    @Query("SELECT COUNT(*) FROM timeline_items")
+    fun observeTimelineCount(): Flow<Int>
+
+    /**
+     * Where one photo sits in the timeline, by counting everything that sorts
+     * ahead of it under the exact ordering [pagingTimeline] uses. The viewer
+     * needs a position to open at, and asking the database is the only answer
+     * that stays right when only part of the list has been loaded.
+     *
+     * Returns -1 when the photo is gone — deleted while the viewer was opening.
      */
     @Query(
         """
-        SELECT
-            'l' || l.id                           AS itemKey,
-            l.contentUri                          AS localUri,
-            l.remoteId                            AS remoteId,
-            COALESCE(l.capturedAt, l.dateModified) AS capturedAt,
-            l.mimeType                            AS mimeType,
-            l.durationMs                          AS durationMs,
-            l.width                               AS width,
-            l.height                              AS height,
-            l.filename                            AS filename,
-            l.state                               AS backupState
-        FROM local_assets AS l
-        WHERE l.state != 'SKIPPED'
-
-        UNION ALL
-
-        SELECT
-            'r' || r.id AS itemKey,
-            NULL        AS localUri,
-            r.id        AS remoteId,
-            r.capturedAt AS capturedAt,
-            r.mimeType  AS mimeType,
-            r.durationMs AS durationMs,
-            r.width     AS width,
-            r.height    AS height,
-            r.filename  AS filename,
-            NULL        AS backupState
-        FROM remote_assets AS r
-        WHERE r.deleted = 0
-          AND (
-                r.sha256 IS NULL
-                OR r.sha256 NOT IN (
-                    SELECT sha256 FROM local_assets
-                    WHERE sha256 IS NOT NULL AND state != 'SKIPPED'
-                )
-              )
-
-        ORDER BY capturedAt DESC
+        SELECT CASE
+            WHEN NOT EXISTS (SELECT 1 FROM timeline_items WHERE itemKey = :itemKey) THEN -1
+            ELSE (
+                SELECT COUNT(*) FROM timeline_items
+                WHERE capturedAt > :capturedAt
+                   OR (capturedAt = :capturedAt AND itemKey > :itemKey)
+            )
+        END
         """,
     )
-    fun observeTimeline(): Flow<List<GalleryItem>>
+    suspend fun positionOf(itemKey: String, capturedAt: Long): Int
 
     @Query("SELECT COUNT(*) FROM remote_assets WHERE deleted = 0")
     suspend fun remoteCount(): Int

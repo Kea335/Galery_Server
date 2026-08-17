@@ -52,7 +52,7 @@ certificate on the phone; release builds do not.
 ```
 app/src/main/java/com/kadr/app/
 ├── data/
-│   ├── local/     Room: LocalAsset, the §8 state machine, DAO
+│   ├── local/     Room: LocalAsset, the §8 state machine, DAO, timeline view
 │   ├── media/     MediaStoreScanner, Sha256Hasher
 │   ├── prefs/     SettingsStore, KeystoreCipher (the token at rest)
 │   ├── remote/    Retrofit API, DTOs, ChunkRequestBody, error mapping
@@ -111,6 +111,34 @@ them, so the app can be driven by hand against something real.
 ```bash
 adb shell am instrument -w -e class com.kadr.app.SeedMediaTest com.kadr.app.debug.test/androidx.test.runner.AndroidJUnitRunner
 ```
+
+## Reading the timeline a page at a time (§15)
+
+The grid, the header count and the viewer all read one `@DatabaseView`,
+`timeline_items`, which is the local-plus-server union that used to live inline
+in the DAO. Three readers of one merged query is exactly the shape that rots
+when it is copy-pasted, and Room can create a view for us.
+
+`GalleryDao.pagingTimeline()` hands back a `PagingSource`, so opening the app
+reads two screens of photos rather than the whole library. Month dividers are
+folded in with `insertSeparators` instead of being built in memory, and the
+"N photos" line is a `COUNT(*)` rather than a list length.
+
+**The ordering had to become total.** It used to be `ORDER BY capturedAt DESC`,
+which is fine when you read everything at once — but a page is a `LIMIT/OFFSET`
+window, and two rows the database may return in either order can then land on
+two pages or on none. A burst of shots shares a capture time, so this is not a
+rare case. `ORDER BY capturedAt DESC, itemKey DESC` makes the window
+deterministic; `TimelinePagingTest` pins it by stacking ties across every page
+boundary.
+
+**The viewer opens on a photo, not on a position.** A position taken from a
+half-loaded list points somewhere else as soon as more of it is read, so the
+route carries the item key and the viewer asks the database where that key sits
+(`positionOf`, counting what sorts ahead of it under the same ordering). Its
+pager keeps placeholders **on** — it opens at page 4,000 without having read
+anything around it. The grid keeps them off, because separators cannot decide
+where a month begins when the rows either side are null.
 
 ## The device token at rest (§6, §13)
 
@@ -283,10 +311,9 @@ touch targets are in `ui/Haptics.kt` and `ui/theme/Theme.kt`.
   shared-element animation itself. `adb shell input` cannot send multi-touch,
   and a transition is not something a screenshot proves. Both are wired and
   crash-free; they need a human with a device to sign off.
-- The timeline loads the whole library into one list. That is fine at the few
-  hundred assets tested and should hold to a few thousand, but §15's "cold start
-  under 800 ms" at 10,000 assets wants Paging 3. The DAO is shaped so swapping
-  `Flow<List<…>>` for a `PagingSource` is a local change.
+- The 800 ms cold start §15 asks for at 10,000 assets has not been **measured**
+  on a device; the timeline is paged now (see below), but the number itself is
+  still unverified.
 - §12's right-edge fast scrubber and selection mode are still not built. They
   are the two timeline details M6 did not reach; free-up-space works as a bulk
   action instead of a per-photo selection.

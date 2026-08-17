@@ -31,7 +31,7 @@ import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
-import androidx.compose.foundation.lazy.grid.itemsIndexed
+import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -73,6 +73,9 @@ import androidx.media3.common.Player
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.ui.AspectRatioFrameLayout
 import androidx.media3.ui.PlayerView
+import androidx.paging.LoadState
+import androidx.paging.compose.collectAsLazyPagingItems
+import androidx.paging.compose.itemKey
 import coil3.compose.AsyncImage
 import com.kadr.app.data.local.GalleryItem
 import com.kadr.app.data.repo.ServerFull
@@ -93,11 +96,11 @@ import com.kadr.app.ui.theme.KadrMuted
 fun SharedTransitionScope.TimelineScreen(
     viewModel: GalleryViewModel,
     animatedVisibilityScope: AnimatedVisibilityScope,
-    onOpenPhoto: (index: Int) -> Unit,
+    onOpenPhoto: (item: GalleryItem) -> Unit,
     onOpenBackup: () -> Unit,
 ) {
-    val entries by viewModel.entries.collectAsStateWithLifecycle()
-    val photos by viewModel.photos.collectAsStateWithLifecycle()
+    val entries = viewModel.entries.collectAsLazyPagingItems()
+    val photoCount by viewModel.photoCount.collectAsStateWithLifecycle()
     val syncing by viewModel.syncing.collectAsStateWithLifecycle()
     val backingUp by viewModel.backingUp.collectAsStateWithLifecycle()
     val progress by viewModel.progress.collectAsStateWithLifecycle()
@@ -142,12 +145,16 @@ fun SharedTransitionScope.TimelineScreen(
     }
 
     // The month of whatever is at the top right now, for the floating pill.
-    val visibleMonth by remember(entries) {
+    // `peek` rather than `get`: reading the top row must not be what triggers
+    // the next page to load.
+    val visibleMonth by remember {
         derivedStateOf {
             val firstIndex = gridState.firstVisibleItemIndex
-            entries.take(firstIndex + 1)
+            (firstIndex downTo 0)
+                .asSequence()
+                .mapNotNull { entries.peek(it) }
                 .filterIsInstance<TimelineEntry.MonthHeader>()
-                .lastOrNull()
+                .firstOrNull()
                 ?.label
         }
     }
@@ -175,20 +182,24 @@ fun SharedTransitionScope.TimelineScreen(
                         onZoomOut = { viewModel.stepColumns(zoomingIn = false) },
                     ),
             ) {
-                itemsIndexed(
-                    items = entries,
-                    span = { _, entry ->
-                        if (entry is TimelineEntry.MonthHeader) GridItemSpan(maxLineSpan)
-                        else GridItemSpan(1)
+                items(
+                    count = entries.itemCount,
+                    span = { index ->
+                        if (entries.peek(index) is TimelineEntry.MonthHeader) {
+                            GridItemSpan(maxLineSpan)
+                        } else {
+                            GridItemSpan(1)
+                        }
                     },
-                    key = { _, entry ->
+                    key = entries.itemKey { entry ->
                         when (entry) {
                             is TimelineEntry.MonthHeader -> "month-${entry.month}"
                             is TimelineEntry.Photo -> entry.item.key
                         }
                     },
-                ) { _, entry ->
-                    when (entry) {
+                ) { index ->
+                    when (val entry = entries[index]) {
+                        null -> Unit
                         is TimelineEntry.MonthHeader -> MonthDivider(
                             label = entry.label,
                             modifier = Modifier.animateItem(
@@ -200,13 +211,12 @@ fun SharedTransitionScope.TimelineScreen(
                         )
 
                         is TimelineEntry.Photo -> {
-                            val photoIndex = photos.indexOfFirst { it.key == entry.item.key }
                             GalleryCell(
                                 item = entry.item,
                                 model = viewModel.thumbnailModel(entry.item),
                                 animatedVisibilityScope = animatedVisibilityScope,
                                 previewPlayer = previewPlayer.takeIf { previewKey == entry.item.key },
-                                onClick = { if (photoIndex >= 0) onOpenPhoto(photoIndex) },
+                                onClick = { onOpenPhoto(entry.item) },
                                 onPreviewStart = {
                                     val uri = viewModel.mediaUri(entry.item) ?: return@GalleryCell
                                     haptics.select()
@@ -235,7 +245,7 @@ fun SharedTransitionScope.TimelineScreen(
             }
 
             TopChrome(
-                photoCount = photos.size,
+                photoCount = photoCount,
                 syncing = syncing,
                 backingUp = backingUp,
                 backupFraction = progress?.overallFraction,
@@ -266,7 +276,10 @@ fun SharedTransitionScope.TimelineScreen(
                 )
             }
 
-            if (entries.isEmpty()) {
+            // Only once the first page has actually come back — otherwise "no
+            // photos yet" flashes up on every cold start before the answer is in.
+            val loaded = entries.loadState.refresh is LoadState.NotLoading
+            if (loaded && entries.itemCount == 0) {
                 EmptyTimeline(
                     syncing = syncing,
                     modifier = Modifier.align(Alignment.Center),

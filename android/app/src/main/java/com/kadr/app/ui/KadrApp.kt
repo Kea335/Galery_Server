@@ -1,5 +1,6 @@
 package com.kadr.app.ui
 
+import android.net.Uri
 import androidx.compose.animation.ExperimentalSharedTransitionApi
 import androidx.compose.animation.SharedTransitionLayout
 import androidx.compose.animation.core.Spring
@@ -36,9 +37,14 @@ object Routes {
     const val BACKUP = "backup"
     const val SETTINGS = "settings"
     const val TRASH = "trash"
-    const val VIEWER = "viewer/{index}"
+    /**
+     * The photo itself, not its position. A position taken from a partly loaded
+     * timeline would point somewhere else as soon as more of it was read; the
+     * key never moves, and the viewer asks the database where it sits.
+     */
+    const val VIEWER = "viewer/{key}/{capturedAt}"
 
-    fun viewer(index: Int) = "viewer/$index"
+    fun viewer(key: String, capturedAt: Long) = "viewer/${Uri.encode(key)}/$capturedAt"
 }
 
 @HiltViewModel
@@ -83,19 +89,25 @@ fun KadrApp() {
                 TimelineScreen(
                     viewModel = galleryViewModel,
                     animatedVisibilityScope = this@composable,
-                    onOpenPhoto = { index -> navController.navigate(Routes.viewer(index)) },
+                    onOpenPhoto = { item ->
+                        navController.navigate(Routes.viewer(item.key, item.capturedAt))
+                    },
                     onOpenBackup = { navController.navigate(Routes.BACKUP) },
                 )
             }
 
             composable(
                 route = Routes.VIEWER,
-                arguments = listOf(navArgument("index") { type = NavType.IntType }),
+                arguments = listOf(
+                    navArgument("key") { type = NavType.StringType },
+                    navArgument("capturedAt") { type = NavType.LongType },
+                ),
             ) { backStackEntry ->
                 ViewerScreen(
                     viewModel = galleryViewModel,
                     animatedVisibilityScope = this@composable,
-                    startIndex = backStackEntry.arguments?.getInt("index") ?: 0,
+                    startKey = backStackEntry.arguments?.getString("key").orEmpty(),
+                    startCapturedAt = backStackEntry.arguments?.getLong("capturedAt") ?: 0L,
                     onClose = { navController.popBackStack() },
                 )
             }

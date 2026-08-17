@@ -23,7 +23,7 @@ object AppModule {
     @Singleton
     fun provideDatabase(@ApplicationContext context: Context): KadrDatabase =
         Room.databaseBuilder(context, KadrDatabase::class.java, "kadr.db")
-            .addMigrations(KadrDatabase.MIGRATION_1_2)
+            .addMigrations(KadrDatabase.MIGRATION_1_2, KadrDatabase.MIGRATION_2_3)
             .build()
 
     @Provides
