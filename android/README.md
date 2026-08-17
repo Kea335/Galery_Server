@@ -284,6 +284,15 @@ Android's own delete dialog asks the user. Afterwards only rows whose file has
 genuinely gone are marked freed — if the user unticked something in the system
 dialog, its row stays VERIFIED. `FreeUpSpaceTest` pins all three behaviours.
 
+Selection mode (§12) feeds the same machine. Holding a photo starts a
+selection — holding a **video** still previews it, which is §11's one flourish
+and not worth trading away — and the picked photos become a scoped plan that
+goes through the *same* server re-confirmation as the bulk action. That sharing
+is deliberate: rule 2 is the only thing standing between a tap and somebody's
+last copy, and a second implementation of it would eventually disagree with the
+first. Server-only rows and anything not VERIFIED simply never come back from
+the query, so a mixed selection needs no special case.
+
 Haptics, Material You as an opt-in, reduce-motion support (`kadrSpring()`
 collapses to a cut when the user has asked for less motion) and 48 dp minimum
 touch targets are in `ui/Haptics.kt` and `ui/theme/Theme.kt`.
@@ -314,9 +323,12 @@ touch targets are in `ui/Haptics.kt` and `ui/theme/Theme.kt`.
 - The 800 ms cold start §15 asks for at 10,000 assets has not been **measured**
   on a device; the timeline is paged now (see below), but the number itself is
   still unverified.
-- §12's right-edge fast scrubber and selection mode are still not built. They
-  are the two timeline details M6 did not reach; free-up-space works as a bulk
-  action instead of a per-photo selection.
+- §12's right-edge fast scrubber is still not built.
+- Selection mode is built and its repository half is tested, but **nothing has
+  looked at it**. The tick, the picked-cell inset and the selection bar have
+  never been on a screen: an instrumentation run uninstalls the app afterwards,
+  so a screenshot needs a signed-in build and a human. Same shelf as
+  pinch-to-zoom and the shared-element transition.
 - Server-side thumbnails need `ffmpeg` on the server. Without it `/thumb`
   answers 503 and server-only photos show an empty cell — local photos are
   unaffected because they render straight from the `content://` URI.

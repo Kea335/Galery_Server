@@ -54,31 +54,48 @@ class SpaceRepository @Inject constructor(
      * and left alone.
      */
     suspend fun plan(): Result<FreeUpPlan> = withContext(Dispatchers.IO) {
+        runCatching { confirm(dao.verifiedWithLocalCopy()) }
+    }
+
+    /**
+     * The same plan for the photos the user picked in the grid (§12's selection
+     * mode). Deliberately routed through the same [confirm] as the bulk action:
+     * rule 2 is the one that stands between a tap and someone's only copy, and
+     * two versions of it would eventually disagree.
+     *
+     * Ids that are not VERIFIED, have no hash, or are server-only simply do not
+     * come back from the query — a selection can hold all three.
+     */
+    suspend fun plan(assetIds: List<Long>): Result<FreeUpPlan> = withContext(Dispatchers.IO) {
         runCatching {
-            val candidates = dao.verifiedWithLocalCopy()
-            if (candidates.isEmpty()) return@runCatching FreeUpPlan(emptyList(), 0, 0)
-
-            val api = apiProvider.api()
-            val hashes = candidates.mapNotNull { it.sha256 }.distinct()
-
-            // Ask in batches of 500 (§9) and collect everything still missing —
-            // a hash the server reports as missing must not be deleted here.
-            val missing = hashes.chunked(500).flatMap { chunk ->
-                apiCall(json) { api.check(CheckRequest(chunk)) }.data.missing
-            }.toSet()
-
-            val safe = candidates.filter { it.sha256 != null && it.sha256 !in missing }
-            val withheld = candidates.size - safe.size
-            if (withheld > 0) {
-                Log.w(TAG, "$withheld assets are marked verified but the server does not have them")
-            }
-
-            FreeUpPlan(
-                assets = safe,
-                totalBytes = safe.sumOf { it.sizeBytes },
-                withheld = withheld,
-            )
+            if (assetIds.isEmpty()) return@runCatching FreeUpPlan(emptyList(), 0, 0)
+            confirm(dao.verifiedWithLocalCopy(assetIds))
         }
+    }
+
+    private suspend fun confirm(candidates: List<LocalAsset>): FreeUpPlan {
+        if (candidates.isEmpty()) return FreeUpPlan(emptyList(), 0, 0)
+
+        val api = apiProvider.api()
+        val hashes = candidates.mapNotNull { it.sha256 }.distinct()
+
+        // Ask in batches of 500 (§9) and collect everything still missing —
+        // a hash the server reports as missing must not be deleted here.
+        val missing = hashes.chunked(500).flatMap { chunk ->
+            apiCall(json) { api.check(CheckRequest(chunk)) }.data.missing
+        }.toSet()
+
+        val safe = candidates.filter { it.sha256 != null && it.sha256 !in missing }
+        val withheld = candidates.size - safe.size
+        if (withheld > 0) {
+            Log.w(TAG, "$withheld assets are marked verified but the server does not have them")
+        }
+
+        return FreeUpPlan(
+            assets = safe,
+            totalBytes = safe.sumOf { it.sizeBytes },
+            withheld = withheld,
+        )
     }
 
     /**

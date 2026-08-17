@@ -77,6 +77,16 @@ interface LocalAssetDao {
     )
     suspend fun verifiedWithLocalCopy(): List<LocalAsset>
 
+    /** The same candidates, narrowed to what the user picked out of the grid. */
+    @Query(
+        """
+        SELECT * FROM local_assets
+        WHERE id IN (:ids) AND state = 'VERIFIED' AND sha256 IS NOT NULL
+        ORDER BY sizeBytes DESC
+        """,
+    )
+    suspend fun verifiedWithLocalCopy(ids: List<Long>): List<LocalAsset>
+
     @Query("SELECT COALESCE(SUM(sizeBytes), 0) FROM local_assets WHERE state = 'VERIFIED'")
     suspend fun reclaimableBytes(): Long
 

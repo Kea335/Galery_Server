@@ -15,8 +15,10 @@ import com.kadr.app.data.prefs.KadrSettings
 import com.kadr.app.data.prefs.SettingsStore
 import com.kadr.app.data.repo.BackupProgress
 import com.kadr.app.data.repo.BackupRepository
+import com.kadr.app.data.repo.FreeUpPlan
 import com.kadr.app.data.repo.LibraryRepository
 import com.kadr.app.data.repo.ServerFull
+import com.kadr.app.data.repo.SpaceRepository
 import com.kadr.app.data.video.PlayerFactory
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.Flow
@@ -26,6 +28,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import java.time.Instant
 import java.time.YearMonth
@@ -44,6 +47,7 @@ sealed interface TimelineEntry {
 class GalleryViewModel @Inject constructor(
     private val library: LibraryRepository,
     private val backup: BackupRepository,
+    private val space: SpaceRepository,
     private val scheduler: BackupScheduler,
     /** Handed to the screens so they can build their own short-lived players. */
     val playerFactory: PlayerFactory,
@@ -80,6 +84,35 @@ class GalleryViewModel @Inject constructor(
     private val _message = MutableStateFlow<String?>(null)
     val message: StateFlow<String?> = _message.asStateFlow()
 
+    // ─── Selection (§12) ────────────────────────────────────────────────────
+
+    /**
+     * Item keys, not items: the grid is paged, so the same photo arrives as a
+     * fresh object every time its page is re-read. The key is what survives.
+     *
+     * Selection mode is on exactly while this is non-empty — there is no second
+     * flag to leave stranded, and unpicking the last photo puts the timeline
+     * back the way it was.
+     */
+    private val _selection = MutableStateFlow<Set<String>>(emptySet())
+    val selection: StateFlow<Set<String>> = _selection.asStateFlow()
+
+    private val _freeUpPlan = MutableStateFlow<FreeUpPlan?>(null)
+    val freeUpPlan: StateFlow<FreeUpPlan?> = _freeUpPlan.asStateFlow()
+
+    private val _busy = MutableStateFlow(false)
+    val busy: StateFlow<Boolean> = _busy.asStateFlow()
+
+    fun toggleSelection(item: GalleryItem) {
+        _selection.update { current ->
+            if (item.key in current) current - item.key else current + item.key
+        }
+    }
+
+    fun clearSelection() {
+        _selection.value = emptySet()
+    }
+
     /** §12: pinch to move between 2, 3 and 5 columns. */
     var columns by mutableIntStateOf(3)
         private set
@@ -109,6 +142,76 @@ class GalleryViewModel @Inject constructor(
         scheduler.backupNow()
         _message.value = "Backup queued."
     }
+
+    // ─── Free up space, for the selection (§10.7, §12) ──────────────────────
+
+    /**
+     * Builds a plan for the picked photos. Every rule §10.7 sets still applies —
+     * the repository re-asks the server whether it holds those exact hashes
+     * before anything is offered up for deletion.
+     */
+    fun prepareFreeUp() {
+        if (_busy.value) return
+        val ids = _selection.value.mapNotNull(::localAssetId)
+        if (ids.isEmpty()) {
+            _message.value = "Nothing here is backed up yet, so nothing can be freed."
+            return
+        }
+
+        viewModelScope.launch {
+            _busy.value = true
+            space.plan(ids)
+                .onSuccess { plan ->
+                    if (plan.isEmpty) {
+                        _message.value = "The server could not vouch for any of these yet."
+                    } else {
+                        _freeUpPlan.value = plan
+                    }
+                }
+                .onFailure { _message.value = "Could not check with the server: ${it.message}" }
+            _busy.value = false
+        }
+    }
+
+    fun cancelFreeUp() {
+        _freeUpPlan.value = null
+    }
+
+    fun deleteRequestFor(plan: FreeUpPlan) = space.deleteRequest(plan)
+
+    /** Called after the system dialog closes, whatever the user chose there. */
+    fun onFreeUpFinished(plan: FreeUpPlan) {
+        viewModelScope.launch {
+            val freed = space.markFreed(plan)
+            _freeUpPlan.value = null
+            clearSelection()
+            _message.value = if (freed > 0) {
+                "Freed $freed file${if (freed == 1) "" else "s"}."
+            } else {
+                "Nothing was removed."
+            }
+        }
+    }
+
+    /** API 26–29 has no system dialog; the app's own confirmation is the gate. */
+    fun deleteWithoutSystemDialog(plan: FreeUpPlan) {
+        viewModelScope.launch {
+            _busy.value = true
+            space.deleteDirectly(plan)
+            val freed = space.markFreed(plan)
+            _freeUpPlan.value = null
+            _busy.value = false
+            clearSelection()
+            _message.value = "Freed $freed files."
+        }
+    }
+
+    /**
+     * Local row id out of a timeline key. Server-only rows start with `r` and
+     * have no local file to free, so they drop out here.
+     */
+    private fun localAssetId(key: String): Long? =
+        key.takeIf { it.startsWith("l") }?.drop(1)?.toLongOrNull()
 
     /**
      * Where a photo sits in the timeline, asked of the database rather than of

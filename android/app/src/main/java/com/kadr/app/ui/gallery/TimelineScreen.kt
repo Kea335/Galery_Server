@@ -5,6 +5,11 @@ import androidx.compose.animation.AnimatedVisibilityScope
 import androidx.compose.animation.ExperimentalSharedTransitionApi
 import androidx.compose.animation.SharedTransitionScope
 import androidx.compose.animation.core.Spring
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.IntentSenderRequest
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.activity.compose.BackHandler
+import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -36,9 +41,15 @@ import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.DeleteSweep
+import androidx.compose.material.icons.filled.RadioButtonUnchecked
 import androidx.compose.material.icons.filled.CloudOff
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -101,15 +112,29 @@ fun SharedTransitionScope.TimelineScreen(
 ) {
     val entries = viewModel.entries.collectAsLazyPagingItems()
     val photoCount by viewModel.photoCount.collectAsStateWithLifecycle()
+    val selection by viewModel.selection.collectAsStateWithLifecycle()
+    val freeUpPlan by viewModel.freeUpPlan.collectAsStateWithLifecycle()
+    val busy by viewModel.busy.collectAsStateWithLifecycle()
     val syncing by viewModel.syncing.collectAsStateWithLifecycle()
     val backingUp by viewModel.backingUp.collectAsStateWithLifecycle()
     val progress by viewModel.progress.collectAsStateWithLifecycle()
     val message by viewModel.message.collectAsStateWithLifecycle()
     val serverFull by viewModel.serverFull.collectAsStateWithLifecycle()
 
+    val selecting = selection.isNotEmpty()
+
     val gridState = rememberLazyGridState()
     val snackbarHostState = remember { SnackbarHostState() }
     val haptics = rememberHaptics()
+
+    // Back gets you out of the selection before it gets you out of the screen.
+    BackHandler(enabled = selecting) { viewModel.clearSelection() }
+
+    // Android shows its own confirmation for the deletion; this only reports
+    // back so the rows can be marked freed.
+    val deleteLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.StartIntentSenderForResult(),
+    ) { freeUpPlan?.let(viewModel::onFreeUpFinished) }
 
     // §12: a small buzz when the queue drains, so a finished backup registers
     // without demanding attention.
@@ -215,8 +240,23 @@ fun SharedTransitionScope.TimelineScreen(
                                 item = entry.item,
                                 model = viewModel.thumbnailModel(entry.item),
                                 animatedVisibilityScope = animatedVisibilityScope,
-                                previewPlayer = previewPlayer.takeIf { previewKey == entry.item.key },
-                                onClick = { onOpenPhoto(entry.item) },
+                                previewPlayer = previewPlayer.takeIf {
+                                    previewKey == entry.item.key
+                                },
+                                selecting = selecting,
+                                selected = entry.item.key in selection,
+                                onClick = {
+                                    if (selecting) {
+                                        haptics.select()
+                                        viewModel.toggleSelection(entry.item)
+                                    } else {
+                                        onOpenPhoto(entry.item)
+                                    }
+                                },
+                                onLongPress = {
+                                    haptics.select()
+                                    viewModel.toggleSelection(entry.item)
+                                },
                                 onPreviewStart = {
                                     val uri = viewModel.mediaUri(entry.item) ?: return@GalleryCell
                                     haptics.select()
@@ -244,15 +284,25 @@ fun SharedTransitionScope.TimelineScreen(
                 }
             }
 
-            TopChrome(
-                photoCount = photoCount,
-                syncing = syncing,
-                backingUp = backingUp,
-                backupFraction = progress?.overallFraction,
-                serverFull = serverFull,
-                onOpenBackup = onOpenBackup,
-                modifier = Modifier.onSizeChanged { chromeHeight = it.height },
-            )
+            if (selecting) {
+                SelectionChrome(
+                    count = selection.size,
+                    busy = busy,
+                    onClose = viewModel::clearSelection,
+                    onFreeUp = viewModel::prepareFreeUp,
+                    modifier = Modifier.onSizeChanged { chromeHeight = it.height },
+                )
+            } else {
+                TopChrome(
+                    photoCount = photoCount,
+                    syncing = syncing,
+                    backingUp = backingUp,
+                    backupFraction = progress?.overallFraction,
+                    serverFull = serverFull,
+                    onOpenBackup = onOpenBackup,
+                    modifier = Modifier.onSizeChanged { chromeHeight = it.height },
+                )
+            }
 
             // Sticky month, but only while the finger is moving (§12).
             AnimatedVisibility(
@@ -283,6 +333,104 @@ fun SharedTransitionScope.TimelineScreen(
                 EmptyTimeline(
                     syncing = syncing,
                     modifier = Modifier.align(Alignment.Center),
+                )
+            }
+        }
+    }
+
+    // §10.7: the app says exactly what is about to go, and from where, before
+    // Android's own dialog asks again.
+    freeUpPlan?.let { plan ->
+        AlertDialog(
+            onDismissRequest = viewModel::cancelFreeUp,
+            title = { Text("Remove ${plan.assets.size} from this phone?") },
+            text = {
+                Text(
+                    buildString {
+                        append("${formatBytes(plan.totalBytes)} will be freed. ")
+                        append("The server keeps its copy — these stay in the timeline.")
+                        if (plan.withheld > 0) {
+                            append(
+                                "\n\n${plan.withheld} were left alone: the server could not " +
+                                    "confirm it still has them.",
+                            )
+                        }
+                    },
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        val request = viewModel.deleteRequestFor(plan)
+                        if (request != null) {
+                            deleteLauncher.launch(IntentSenderRequest.Builder(request).build())
+                        } else {
+                            viewModel.deleteWithoutSystemDialog(plan)
+                        }
+                    },
+                ) { Text("Remove") }
+            },
+            dismissButton = {
+                TextButton(onClick = viewModel::cancelFreeUp) { Text("Cancel") }
+            },
+        )
+    }
+}
+
+/**
+ * What the top of the screen becomes while photos are picked (§12).
+ *
+ * It replaces the usual chrome rather than stacking on top of it: the sync and
+ * backup state is not what anyone is looking at mid-selection, and the grid
+ * measures its own top inset from whatever is here.
+ */
+@Composable
+private fun SelectionChrome(
+    count: Int,
+    busy: Boolean,
+    onClose: () -> Unit,
+    onFreeUp: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = modifier
+            .fillMaxWidth()
+            .background(MaterialTheme.colorScheme.surfaceContainerHigh)
+            .padding(top = WindowInsets.statusBars.asPaddingValues().calculateTopPadding())
+            .padding(horizontal = 8.dp, vertical = 8.dp),
+    ) {
+        IconButton(onClick = onClose) {
+            Icon(
+                imageVector = Icons.Default.Close,
+                contentDescription = "Stop selecting",
+                tint = MaterialTheme.colorScheme.onSurface,
+            )
+        }
+
+        Text(
+            text = "$count selected",
+            style = MaterialTheme.typography.titleMedium,
+            color = MaterialTheme.colorScheme.onSurface,
+            modifier = Modifier
+                .weight(1f)
+                .padding(start = 4.dp),
+        )
+
+        if (busy) {
+            CircularProgressIndicator(
+                strokeWidth = 2.dp,
+                color = KadrAmber,
+                modifier = Modifier
+                    .size(20.dp)
+                    .padding(end = 4.dp),
+            )
+        } else {
+            IconButton(onClick = onFreeUp) {
+                Icon(
+                    imageVector = Icons.Default.DeleteSweep,
+                    contentDescription = "Free up space on this phone",
+                    tint = MaterialTheme.colorScheme.onSurface,
                 )
             }
         }
@@ -406,17 +554,27 @@ private fun SharedTransitionScope.GalleryCell(
     model: Any?,
     animatedVisibilityScope: AnimatedVisibilityScope,
     previewPlayer: Player?,
+    selecting: Boolean,
+    selected: Boolean,
     onClick: () -> Unit,
+    onLongPress: () -> Unit,
     onPreviewStart: () -> Unit,
     onPreviewStop: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    // The picked photo shrinks back a little, so a selection reads at a glance
+    // from across the grid rather than only by its tick.
+    val inset by animateDpAsState(
+        targetValue = if (selected) 8.dp else 0.dp,
+        animationSpec = spring(dampingRatio = 0.8f, stiffness = Spring.StiffnessMediumLow),
+        label = "cellInset",
+    )
+
     Box(
         modifier = modifier
             .aspectRatio(1f)
-            .clip(RoundedCornerShape(2.dp))
             .background(MaterialTheme.colorScheme.surfaceContainer)
-            .pointerInput(item.key, item.isVideo) {
+            .pointerInput(item.key, item.isVideo, selecting) {
                 awaitEachGesture {
                     awaitFirstDown()
                     var scrolledAway = false
@@ -432,15 +590,24 @@ private fun SharedTransitionScope.GalleryCell(
                     when {
                         scrolledAway -> Unit
                         up != null -> onClick()
+
+                        // While picking, a hold is just another way to pick —
+                        // previewing a video mid-selection would be a fight
+                        // between two meanings of the same gesture.
+                        selecting -> {
+                            onLongPress()
+                            waitForUpOrCancellation()
+                        }
+
                         item.isVideo -> {
                             onPreviewStart()
                             waitForUpOrCancellation()
                             onPreviewStop()
                         }
 
+                        // §12: holding a photo is what starts a selection.
                         else -> {
-                            // Long-pressing a photo does nothing yet; selection
-                            // mode is M6.
+                            onLongPress()
                             waitForUpOrCancellation()
                         }
                     }
@@ -453,6 +620,8 @@ private fun SharedTransitionScope.GalleryCell(
             contentScale = ContentScale.Crop,
             modifier = Modifier
                 .fillMaxSize()
+                .padding(inset)
+                .clip(RoundedCornerShape(if (selected) 8.dp else 2.dp))
                 .sharedElement(
                     sharedContentState = rememberSharedContentState(key = "photo-${item.key}"),
                     animatedVisibilityScope = animatedVisibilityScope,
@@ -499,7 +668,7 @@ private fun SharedTransitionScope.GalleryCell(
         }
 
         // Only what is NOT yet safe gets a mark. Backed-up is the quiet default.
-        if (item.isLocalOnly) {
+        if (item.isLocalOnly && !selecting) {
             Icon(
                 imageVector = Icons.Default.CloudOff,
                 contentDescription = "Not backed up yet",
@@ -508,6 +677,18 @@ private fun SharedTransitionScope.GalleryCell(
                     .align(Alignment.TopEnd)
                     .padding(4.dp)
                     .size(12.dp),
+            )
+        }
+
+        if (selecting) {
+            Icon(
+                imageVector = if (selected) Icons.Default.CheckCircle else Icons.Default.RadioButtonUnchecked,
+                contentDescription = if (selected) "Selected" else "Not selected",
+                tint = if (selected) KadrAmber else Color.White.copy(alpha = 0.8f),
+                modifier = Modifier
+                    .align(Alignment.TopStart)
+                    .padding(6.dp)
+                    .size(20.dp),
             )
         }
     }

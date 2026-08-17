@@ -192,4 +192,45 @@ class FreeUpSpaceTest {
             requireNotNull(database.assets().findById(rowId)).state,
         )
     }
+
+    // ── §12 selection mode: the same rules, narrowed to what was picked ─────
+
+    @Test
+    fun d_a_selection_only_frees_what_was_actually_picked() = runBlocking {
+        backup.upload(rowId).getOrThrow()
+
+        val picked = space.plan(listOf(rowId)).getOrThrow()
+        assertEquals("The picked photo should be freeable", 1, picked.assets.size)
+        assertEquals(rowId, picked.assets.first().id)
+
+        // A row id nobody picked must not ride along.
+        val other = space.plan(listOf(rowId + 9_999)).getOrThrow()
+        assertTrue("Only what the user picked may be planned", other.isEmpty)
+    }
+
+    @Test
+    fun e_a_selection_still_asks_the_server_before_offering_anything() = runBlocking {
+        // Verified on paper, never uploaded — exactly the case rule 2 exists for.
+        val digest = Sha256Hasher(context).hash(mediaUri)
+        val asset = requireNotNull(database.assets().findById(rowId))
+        database.assets().update(
+            asset.copy(sha256 = digest, state = AssetState.VERIFIED, remoteId = "made-up"),
+        )
+
+        val plan = space.plan(listOf(rowId)).getOrThrow()
+
+        assertTrue("Picking a photo must not bypass the server check", plan.isEmpty)
+        assertEquals(1, plan.withheld)
+    }
+
+    @Test
+    fun f_an_empty_selection_plans_nothing_and_asks_no_one() = runBlocking {
+        backup.upload(rowId).getOrThrow()
+
+        val plan = space.plan(emptyList()).getOrThrow()
+
+        assertTrue(plan.isEmpty)
+        assertEquals(0, plan.withheld)
+        assertEquals(0L, plan.totalBytes)
+    }
 }
