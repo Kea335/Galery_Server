@@ -48,9 +48,12 @@ object Routes {
      * timeline would point somewhere else as soon as more of it was read; the
      * key never moves, and the viewer asks the database where it sits.
      */
-    const val VIEWER = "viewer/{key}/{capturedAt}"
+    const val VIEWER = "viewer/{key}/{capturedAt}?album={album}"
 
-    fun viewer(key: String, capturedAt: Long) = "viewer/${Uri.encode(key)}/$capturedAt"
+    fun viewer(key: String, capturedAt: Long, albumId: String? = null): String {
+        val base = "viewer/${Uri.encode(key)}/$capturedAt"
+        return if (albumId == null) base else "$base?album=${Uri.encode(albumId)}"
+    }
 }
 
 @HiltViewModel
@@ -108,6 +111,11 @@ fun KadrApp() {
                 arguments = listOf(
                     navArgument("key") { type = NavType.StringType },
                     navArgument("capturedAt") { type = NavType.LongType },
+                    navArgument("album") {
+                        type = NavType.StringType
+                        nullable = true
+                        defaultValue = null
+                    },
                 ),
             ) { backStackEntry ->
                 ViewerScreen(
@@ -116,6 +124,7 @@ fun KadrApp() {
                     startKey = backStackEntry.arguments?.getString("key").orEmpty(),
                     startCapturedAt = backStackEntry.arguments?.getLong("capturedAt") ?: 0L,
                     onClose = { navController.popBackStack() },
+                    albumId = backStackEntry.arguments?.getString("album"),
                 )
             }
 
@@ -165,6 +174,15 @@ fun KadrApp() {
                     albumId = backStackEntry.arguments?.getString("id").orEmpty(),
                     albumName = backStackEntry.arguments?.getString("name").orEmpty(),
                     onBack = { navController.popBackStack() },
+                    onOpenPhoto = { item ->
+                        navController.navigate(
+                            Routes.viewer(
+                                item.key,
+                                item.capturedAt,
+                                albumId = backStackEntry.arguments?.getString("id"),
+                            ),
+                        )
+                    },
                 )
             }
         }

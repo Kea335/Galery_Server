@@ -163,6 +163,15 @@ data class CreateAlbumRequest(val name: String)
 @Serializable
 data class RenameAlbumRequest(val name: String)
 
+/**
+ * Its own request type rather than one PATCH body with two optional fields: the
+ * server reads "absent" and "null" differently — absent leaves the cover alone,
+ * null clears it — and a shared body would make renaming clear the cover by
+ * accident the moment the serializer decided to write the default.
+ */
+@Serializable
+data class SetAlbumCoverRequest(val coverAssetId: String)
+
 @Serializable
 data class AddAlbumItemsRequest(val assetIds: List<String>)
 

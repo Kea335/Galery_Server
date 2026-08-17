@@ -95,6 +95,24 @@ class AlbumsViewModel @Inject constructor(
 
     fun observeCount(albumId: String): Flow<Int> = albums.observeAlbumCount(albumId)
 
+    /** The album again, for the full-screen viewer opened from inside it. */
+    fun viewerPages(albumId: String): Flow<PagingData<GalleryItem>> =
+        albums.albumViewerPages(albumId).cachedIn(viewModelScope)
+
+    suspend fun positionInAlbum(albumId: String, key: String, capturedAt: Long): Int =
+        albums.positionInAlbum(albumId, key, capturedAt)
+
+    fun setCover(albumId: String, item: GalleryItem) = guarded {
+        val assetId = item.remoteId
+        if (assetId == null) {
+            _message.value = "That photo is not on the server yet, so it cannot be the cover."
+            return@guarded
+        }
+        albums.setCover(albumId, assetId)
+            .onSuccess { _message.value = "Cover set." }
+            .onFailure { _message.value = "Could not set the cover: ${it.message}" }
+    }
+
     fun removeFromAlbum(albumId: String, item: GalleryItem) = guarded {
         val assetId = item.remoteId
         if (assetId == null) {

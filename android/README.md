@@ -157,6 +157,13 @@ a page is a `LIMIT/OFFSET` window and a burst of shots shares a capture time. A
 burst is exactly what someone puts in an album, so `AlbumPagingTest` stacks ties
 across every page boundary.
 
+The cover is whichever photo the album names, and the newest one when it names
+none — one `ORDER BY` that sorts "is this the chosen cover" first and date
+second, so a cover taken back out of the album falls through to the newest
+instead of leaving the card blank. Tapping a photo opens the full-screen viewer,
+which then pages **within the album**: swiping out of an album into the rest of
+the library would be a small betrayal of what was tapped.
+
 Two consequences worth stating out loud:
 
 - **A photo that is not backed up yet cannot go in an album.** The album is a

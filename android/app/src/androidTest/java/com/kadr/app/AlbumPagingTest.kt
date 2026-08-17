@@ -151,6 +151,60 @@ class AlbumPagingTest {
     }
 
     @Test
+    fun g_a_chosen_cover_wins_over_the_newest_photo() = runBlocking {
+        seedLocalOnServer(count = 3, perBurst = 1)
+        addAll(listOf("srv-1", "srv-2", "srv-3"))
+
+        // srv-1 is the newest, so the default cover. Name the oldest instead.
+        dao.upsertAlbums(
+            listOf(RemoteAlbum(albumId, "Georgia", "srv-3", 1_000, false, 3_000)),
+        )
+
+        assertEquals("srv-3", dao.observeAlbums().first().single().coverRemoteId)
+    }
+
+    @Test
+    fun h_a_cover_that_left_the_album_falls_back_to_the_newest() = runBlocking {
+        seedLocalOnServer(count = 3, perBurst = 1)
+        addAll(listOf("srv-1", "srv-2", "srv-3"))
+        dao.upsertAlbums(
+            listOf(RemoteAlbum(albumId, "Georgia", "srv-3", 1_000, false, 3_000)),
+        )
+        // Someone takes the cover photo out. The card must not go blank.
+        dao.upsertItems(
+            listOf(AlbumItem(albumId, "srv-3", addedAt = 1, removed = true, updatedAt = 9)),
+        )
+
+        assertEquals("srv-1", dao.observeAlbums().first().single().coverRemoteId)
+    }
+
+    @Test
+    fun i_the_viewer_position_agrees_with_the_albums_own_pages() = runBlocking {
+        seedLocalOnServer(count = 20, perBurst = 5)
+        addAll((1..20).map { "srv-$it" })
+
+        val paged = readEveryPage()
+
+        // Ends and, more importantly, rows inside a tie group.
+        for (index in listOf(0, 1, 4, 5, 12, 19)) {
+            val item = paged[index]
+            assertEquals(
+                "positionInAlbum disagreed with the album's paging at $index",
+                index,
+                dao.positionInAlbum(albumId, item.key, item.capturedAt),
+            )
+        }
+    }
+
+    @Test
+    fun j_a_photo_outside_the_album_has_no_position_in_it() = runBlocking {
+        seedLocalOnServer(count = 3, perBurst = 1)
+        addAll(listOf("srv-1"))
+
+        assertEquals(-1, dao.positionInAlbum(albumId, "l2", 1_000_000L))
+    }
+
+    @Test
     fun f_a_deleted_album_drops_off_the_list() = runBlocking {
         dao.upsertAlbums(
             listOf(

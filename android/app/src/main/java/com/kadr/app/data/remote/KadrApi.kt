@@ -69,6 +69,12 @@ interface KadrApi {
         @Body body: RenameAlbumRequest,
     ): Envelope<AlbumDto>
 
+    @PATCH("api/v1/albums/{id}")
+    suspend fun setAlbumCover(
+        @Path("id") id: String,
+        @Body body: SetAlbumCoverRequest,
+    ): Envelope<AlbumDto>
+
     @DELETE("api/v1/albums/{id}")
     suspend fun deleteAlbum(@Path("id") id: String): Envelope<AlbumDeletedResponse>
 

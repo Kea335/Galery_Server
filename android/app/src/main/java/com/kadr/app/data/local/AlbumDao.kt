@@ -30,13 +30,16 @@ interface AlbumDao {
      * Every album that still exists, with how many photos are in it and what to
      * draw on the front.
      *
-     * The cover is the newest photo in the album. The server can also name one
-     * explicitly, and that column is synced, but nothing offers to set it yet —
-     * so reading it here would only ever return null and hide the useful answer.
+     * The cover is whichever photo the album names, and the newest one when it
+     * names none. That is one `ORDER BY`, not two queries: sorting by "is this
+     * the chosen cover" first and by date second means a cover that has been
+     * removed from the album, or never belonged to it, quietly falls back to the
+     * newest instead of leaving the card blank.
      *
-     * Both cover columns come from the same subquery shape because a photo this
-     * phone still holds draws from disk instantly, while one that has been freed
-     * has to come from the server.
+     * Both cover columns repeat that identical ordering so they land on the same
+     * row — a photo this phone still holds draws from disk instantly, while one
+     * that has been freed has to come from the server, and mixing the two would
+     * show one album's cover with another photo's file.
      */
     @Query(
         """
@@ -50,14 +53,20 @@ interface AlbumDao {
             (
                 SELECT t.localUri FROM timeline_items t
                 JOIN album_items ai ON ai.assetId = t.remoteId
+                JOIN remote_albums b ON b.id = ai.albumId
                 WHERE ai.albumId = a.id AND ai.removed = 0
-                ORDER BY t.capturedAt DESC, t.itemKey DESC LIMIT 1
+                ORDER BY CASE WHEN t.remoteId = b.coverAssetId THEN 1 ELSE 0 END DESC,
+                         t.capturedAt DESC, t.itemKey DESC
+                LIMIT 1
             ) AS coverLocalUri,
             (
                 SELECT t.remoteId FROM timeline_items t
                 JOIN album_items ai ON ai.assetId = t.remoteId
+                JOIN remote_albums b ON b.id = ai.albumId
                 WHERE ai.albumId = a.id AND ai.removed = 0
-                ORDER BY t.capturedAt DESC, t.itemKey DESC LIMIT 1
+                ORDER BY CASE WHEN t.remoteId = b.coverAssetId THEN 1 ELSE 0 END DESC,
+                         t.capturedAt DESC, t.itemKey DESC
+                LIMIT 1
             ) AS coverRemoteId
         FROM remote_albums a
         WHERE a.deleted = 0
@@ -97,6 +106,37 @@ interface AlbumDao {
         """,
     )
     fun observeAlbumCount(albumId: String): Flow<Int>
+
+    /**
+     * Where a photo sits **inside this album**, under the album's own ordering.
+     *
+     * The viewer opened from an album pages through the album, not the library,
+     * so it needs the album's answer — the same counting trick the timeline
+     * uses, with the membership join in front of it.
+     *
+     * Returns -1 when the photo is not in the album any more.
+     */
+    @Query(
+        """
+        SELECT CASE
+            WHEN NOT EXISTS (
+                SELECT 1 FROM timeline_items t
+                JOIN album_items ai ON ai.assetId = t.remoteId
+                WHERE ai.albumId = :albumId AND ai.removed = 0 AND t.itemKey = :itemKey
+            ) THEN -1
+            ELSE (
+                SELECT COUNT(*) FROM timeline_items t
+                JOIN album_items ai ON ai.assetId = t.remoteId
+                WHERE ai.albumId = :albumId AND ai.removed = 0
+                  AND (
+                        t.capturedAt > :capturedAt
+                     OR (t.capturedAt = :capturedAt AND t.itemKey > :itemKey)
+                  )
+            )
+        END
+        """,
+    )
+    suspend fun positionInAlbum(albumId: String, itemKey: String, capturedAt: Long): Int
 
     /**
      * Which of these photos the server can actually be told about. A photo that

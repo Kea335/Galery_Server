@@ -50,10 +50,12 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.paging.compose.collectAsLazyPagingItems
 import coil3.compose.AsyncImage
 import com.kadr.app.data.local.GalleryItem
+import com.kadr.app.ui.albums.AlbumsViewModel
 import com.kadr.app.ui.formatBytes
 import com.kadr.app.ui.formatDuration
 import com.kadr.app.ui.theme.KadrMuted
@@ -79,16 +81,29 @@ fun SharedTransitionScope.ViewerScreen(
     startKey: String,
     startCapturedAt: Long,
     onClose: () -> Unit,
+    /** Non-null when the viewer was opened from an album (§16.6). */
+    albumId: String? = null,
+    albumsViewModel: AlbumsViewModel = hiltViewModel(),
 ) {
-    val photos = viewModel.photos.collectAsLazyPagingItems()
+    // Opened from an album, the viewer pages through *that album*, not the whole
+    // library — swiping out of an album into the rest of the timeline would be a
+    // small betrayal of what the user tapped.
+    val pages = remember(albumId) {
+        if (albumId != null) albumsViewModel.viewerPages(albumId) else viewModel.photos
+    }
+    val photos = pages.collectAsLazyPagingItems()
 
     // Which page the tapped photo is on is a question for the database: the
     // pages around it may never have been read. Until the answer arrives there
     // is nothing to page through, so the pager is not built at all — building it
     // at 0 first would flash the newest photo before jumping.
-    var startIndex by remember(startKey) { mutableStateOf<Int?>(null) }
-    LaunchedEffect(startKey) {
-        startIndex = viewModel.positionOf(startKey, startCapturedAt)
+    var startIndex by remember(startKey, albumId) { mutableStateOf<Int?>(null) }
+    LaunchedEffect(startKey, albumId) {
+        startIndex = if (albumId != null) {
+            albumsViewModel.positionInAlbum(albumId, startKey, startCapturedAt)
+        } else {
+            viewModel.positionOf(startKey, startCapturedAt)
+        }
     }
 
     val start = startIndex

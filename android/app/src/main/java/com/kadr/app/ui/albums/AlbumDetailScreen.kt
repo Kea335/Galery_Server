@@ -60,6 +60,7 @@ fun AlbumDetailScreen(
     albumId: String,
     albumName: String,
     onBack: () -> Unit,
+    onOpenPhoto: (GalleryItem) -> Unit,
     viewModel: AlbumsViewModel = hiltViewModel(),
 ) {
     val photos = remember(albumId) { viewModel.pages(albumId) }.collectAsLazyPagingItems()
@@ -72,6 +73,9 @@ fun AlbumDetailScreen(
 
     var renaming by remember { mutableStateOf(false) }
     var deleting by remember { mutableStateOf(false) }
+    // One sheet for both photo actions: two separate long-press gestures would
+    // be a guessing game.
+    var acting by remember { mutableStateOf<GalleryItem?>(null) }
     var removing by remember { mutableStateOf<GalleryItem?>(null) }
 
     LaunchedEffect(message) {
@@ -129,10 +133,10 @@ fun AlbumDetailScreen(
                         .clip(RoundedCornerShape(2.dp))
                         .background(MaterialTheme.colorScheme.surfaceContainer)
                         .combinedClickable(
-                            onClick = {},
+                            onClick = { onOpenPhoto(item) },
                             onLongClick = {
                                 haptics.select()
-                                removing = item
+                                acting = item
                             },
                         ),
                 ) {
@@ -179,6 +183,30 @@ fun AlbumDetailScreen(
                 ) { Text("Delete") }
             },
             dismissButton = { TextButton(onClick = { deleting = false }) { Text("Cancel") } },
+        )
+    }
+
+    acting?.let { item ->
+        AlertDialog(
+            onDismissRequest = { acting = null },
+            title = { Text(item.filename) },
+            text = { Text("What should happen to this one?") },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        acting = null
+                        viewModel.setCover(albumId, item)
+                    },
+                ) { Text("Make it the cover") }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = {
+                        removing = item
+                        acting = null
+                    },
+                ) { Text("Take out of album") }
+            },
         )
     }
 

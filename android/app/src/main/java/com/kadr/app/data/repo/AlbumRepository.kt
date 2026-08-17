@@ -16,6 +16,7 @@ import com.kadr.app.data.remote.AlbumItemDto
 import com.kadr.app.data.remote.ApiProvider
 import com.kadr.app.data.remote.CreateAlbumRequest
 import com.kadr.app.data.remote.RenameAlbumRequest
+import com.kadr.app.data.remote.SetAlbumCoverRequest
 import com.kadr.app.data.remote.apiCall
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
@@ -66,6 +67,26 @@ class AlbumRepository @Inject constructor(
             ),
             pagingSourceFactory = { albumDao.pagingAlbum(albumId) },
         ).flow
+
+    /**
+     * The same album for the viewer, but with placeholders: it opens **at** a
+     * position rather than scrolling to one, so page 400 has to exist before
+     * anything around it has been read. The grid keeps them off because
+     * separators cannot reason about null rows.
+     */
+    fun albumViewerPages(albumId: String): Flow<PagingData<GalleryItem>> =
+        Pager(
+            config = PagingConfig(
+                pageSize = VIEWER_PAGE_SIZE,
+                prefetchDistance = VIEWER_PAGE_SIZE,
+                enablePlaceholders = true,
+            ),
+            pagingSourceFactory = { albumDao.pagingAlbum(albumId) },
+        ).flow
+
+    /** Where a photo sits inside this album, or -1 once it is no longer in it. */
+    suspend fun positionInAlbum(albumId: String, key: String, capturedAt: Long): Int =
+        withContext(Dispatchers.IO) { albumDao.positionInAlbum(albumId, key, capturedAt) }
 
     // ─── Delta sync (§9) ────────────────────────────────────────────────────
 
@@ -133,6 +154,21 @@ class AlbumRepository @Inject constructor(
             Unit
         }
     }
+
+    /**
+     * Names the photo the album shows on its card. The server keeps the choice,
+     * so every phone sees the same front.
+     */
+    suspend fun setCover(albumId: String, assetId: String): Result<Unit> =
+        withContext(Dispatchers.IO) {
+            runCatching {
+                apiCall(json) {
+                    apiProvider.api().setAlbumCover(albumId, SetAlbumCoverRequest(assetId))
+                }
+                sync()
+                Unit
+            }
+        }
 
     suspend fun delete(id: String): Result<Unit> = withContext(Dispatchers.IO) {
         runCatching {
@@ -203,5 +239,6 @@ class AlbumRepository @Inject constructor(
         const val PAGE_SIZE = 500
         const val MAX_ITEMS_PER_REQUEST = 500
         const val ALBUM_PAGE_SIZE = 90
+        const val VIEWER_PAGE_SIZE = 12
     }
 }
