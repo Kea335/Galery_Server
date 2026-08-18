@@ -304,5 +304,5 @@ from outside over Tailscale or WireGuard (§13).
 - `GET /assets/{id}/thumb` works, but generation needs `ffmpeg` installed; the
   low-priority background pre-generation worker and its `--dry-run` mode (§17)
   are not built. Thumbnails are generated lazily on first request.
-- No QR page for pairing yet — the code is console-only (§12 onboarding).
+- No QR page for the server address yet; it is typed in by hand (§12 onboarding).
 - No TLS in-process; Caddy is expected to front it.
