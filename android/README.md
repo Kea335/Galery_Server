@@ -44,8 +44,32 @@ error. The Compose and serialization compiler plugins still apply normally.
 ```
 
 The APK lands in `app/build/outputs/apk/debug/`. Debug builds carry
-`usesCleartextTraffic` so you can pair over plain HTTP before installing Caddy's
-certificate on the phone; release builds do not.
+`usesCleartextTraffic` so you can sign in over plain HTTP before installing
+Caddy's certificate on the phone; release builds do not.
+
+### Signing a release
+
+`assembleRelease` works with no key at all and produces
+`app-release-unsigned.apk` — a machine without the key can still compile, minify
+and test, it just cannot ship. To produce something installable, make a key and
+tell Gradle where it is:
+
+```bash
+keytool -genkeypair -v -keystore kadr-release.jks -alias kadr -keyalg RSA -keysize 4096 -validity 10000
+```
+
+Then copy `keystore.properties.example` to `keystore.properties` and fill it in.
+Both the key and that file are git-ignored, and they must stay that way: on
+Android the signing key *is* the app's identity, so anyone holding it can
+publish something that installs straight over this app. It also cannot be
+rotated — **lose the key and this app can never be updated in place again**, so
+keep a backup somewhere that is not this machine.
+
+With the file present the output becomes `app-release.apk`, signed. Check it:
+
+```bash
+apksigner verify --print-certs app/build/outputs/apk/release/app-release.apk
+```
 
 ## Layout
 

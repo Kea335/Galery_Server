@@ -16,7 +16,13 @@ node_modules/
 build/
 local.properties
 *.apk
+
+# The release signing key and its passwords. On Android the key *is* the app's
+# identity: anyone holding it can publish something that installs straight over
+# this one, and it cannot be rotated for an app already out there.
 *.keystore
+*.jks
+keystore.properties
 
 /server/.soak-data/
 /server/.soak-tmp/

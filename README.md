@@ -106,4 +106,6 @@ cd server && npm install && npm start
 ```
 
 Then build and install the app — see [android/README.md](android/README.md).
+A release build needs a signing key you make yourself; the wiring is in place and
+[documented there](android/README.md#signing-a-release).
 Server details and the API reference are in [server/README.md](server/README.md).

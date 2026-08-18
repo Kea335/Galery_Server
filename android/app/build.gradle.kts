@@ -1,3 +1,5 @@
+import java.util.Properties
+
 plugins {
     // AGP 9 brings its own Kotlin integration — applying
     // org.jetbrains.kotlin.android on top is an error now.
@@ -22,12 +24,53 @@ android {
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
+
+    /**
+     * Release signing.
+     *
+     * The keystore and its passwords are read from `keystore.properties`, which
+     * is not checked in. A signing key committed to a repository is a key held
+     * by everyone who ever clones it, and on Android that is not recoverable:
+     * the key *is* the app's identity, so a leaked one can be used to publish
+     * something that installs straight over this one.
+     *
+     * When the file is absent the release build still runs and produces an
+     * unsigned APK. A machine without the key can compile, minify and test —
+     * it simply cannot ship. Failing the whole build instead would make the key
+     * a prerequisite for `assembleRelease` on CI, which it is not.
+     */
+    val signingProperties = Properties().apply {
+        val file = rootProject.file("keystore.properties")
+        if (file.exists()) file.inputStream().use(::load)
+    }
+
+    signingConfigs {
+        if (!signingProperties.isEmpty) {
+            val required = listOf("storeFile", "storePassword", "keyAlias", "keyPassword")
+            val missing = required.filter { signingProperties.getProperty(it).isNullOrBlank() }
+            require(missing.isEmpty()) {
+                "keystore.properties is missing: ${missing.joinToString()}. " +
+                    "See keystore.properties.example."
+            }
+
+            create("release") {
+                storeFile = rootProject.file(signingProperties.getProperty("storeFile"))
+                storePassword = signingProperties.getProperty("storePassword")
+                keyAlias = signingProperties.getProperty("keyAlias")
+                keyPassword = signingProperties.getProperty("keyPassword")
+            }
+        }
+    }
+
     buildTypes {
         debug {
             applicationIdSuffix = ".debug"
             isMinifyEnabled = false
         }
         release {
+            // Null when there is no keystore.properties: the APK comes out
+            // unsigned rather than the build coming out broken.
+            signingConfig = signingConfigs.findByName("release")
             isMinifyEnabled = true
             isShrinkResources = true
             proguardFiles(
