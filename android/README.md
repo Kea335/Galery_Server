@@ -356,6 +356,21 @@ Haptics, Material You as an opt-in, reduce-motion support (`kadrSpring()`
 collapses to a cut when the user has asked for less motion) and 48 dp minimum
 touch targets are in `ui/Haptics.kt` and `ui/theme/Theme.kt`.
 
+## What running it caught
+
+Both suites were green and both of these still crashed the app on first touch.
+Worth remembering the next time a test count looks like proof:
+
+- **A spring overshoots, and padding cannot be negative.** The picked cell
+  animates an 8 dp inset; on the way *back* to zero the spring dips below it and
+  `Modifier.padding` throws rather than clamping. Every deselect killed the app.
+  The value is clamped at the use site now.
+- **`LazyPagingItems.peek` throws on an index it does not hold.** The viewer
+  opens at a position the database supplies, which for the first frames is past
+  the end of a list that has loaded nothing yet. Opening from the timeline hid
+  it — that flow is already warm — so it only surfaced from an album, whose
+  pager is built fresh.
+
 ## Known gaps
 
 - **Video playback is unproven on the emulator.** `c2.goldfish.h264.decoder`
@@ -387,11 +402,12 @@ touch targets are in `ui/Haptics.kt` and `ui/theme/Theme.kt`.
   selection mode: an instrumentation run uninstalls the app afterwards. The data
   layer is tested; the list, the detail grid and the picker are unproven on a
   screen.
-- Selection mode is built and its repository half is tested, but **nothing has
-  looked at it**. The tick, the picked-cell inset and the selection bar have
-  never been on a screen: an instrumentation run uninstalls the app afterwards,
-  so a screenshot needs a signed-in build and a human. Same shelf as
-  pinch-to-zoom and the shared-element transition.
+- Selection mode, albums and the album viewer **have** now been driven on the
+  emulator: pick photos, add them to an album through the real server, open the
+  album, open a photo full-screen. Two crashes only that pass could find, both
+  fixed — see "What running it caught". Pinch-to-zoom and the shared-element
+  transition are still unverified; `adb shell input` cannot send multi-touch and
+  a transition is not something a screenshot proves.
 - Server-side thumbnails need `ffmpeg` on the server. Without it `/thumb`
   answers 503 and server-only photos show an empty cell — local photos are
   unaffected because they render straight from the `content://` URI.

@@ -145,7 +145,16 @@ fun SharedTransitionScope.ViewerScreen(
         label = "viewerDim",
     )
 
-    val current = photos.peek(pagerState.currentPage)
+    // Guarded because the pager opens at a position the database gave us, which
+    // for the first frames is past the end of a list that has loaded nothing
+    // yet — and `peek` throws on an index it does not hold rather than
+    // returning null. Opened from the timeline this never showed, because that
+    // flow is already warm by the time the viewer appears.
+    val current = if (pagerState.currentPage < photos.itemCount) {
+        photos.peek(pagerState.currentPage)
+    } else {
+        null
+    }
 
     Box(
         modifier = Modifier

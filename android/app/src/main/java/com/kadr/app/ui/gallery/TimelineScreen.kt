@@ -643,7 +643,7 @@ private fun SharedTransitionScope.GalleryCell(
     modifier: Modifier = Modifier,
 ) {
     // The picked photo shrinks back a little, so a selection reads at a glance
-    // from across the grid rather than only by its tick.
+    // from across the grid rather than only by its tick. See the clamp below.
     val inset by animateDpAsState(
         targetValue = if (selected) 8.dp else 0.dp,
         animationSpec = spring(dampingRatio = 0.8f, stiffness = Spring.StiffnessMediumLow),
@@ -700,7 +700,10 @@ private fun SharedTransitionScope.GalleryCell(
             contentScale = ContentScale.Crop,
             modifier = Modifier
                 .fillMaxSize()
-                .padding(inset)
+                // Clamped because a spring overshoots by definition: on the way
+                // back to zero it dips below, and padding cannot be negative —
+                // it throws rather than clipping, taking the app with it.
+                .padding(inset.coerceAtLeast(0.dp))
                 .clip(RoundedCornerShape(if (selected) 8.dp else 2.dp))
                 .sharedElement(
                     sharedContentState = rememberSharedContentState(key = "photo-${item.key}"),
