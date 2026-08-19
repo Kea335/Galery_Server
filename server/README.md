@@ -1,122 +1,124 @@
 # Kadr Server
 
-Self-hosted photo & video backup — the server half. Node 24 + Fastify + SQLite,
-no native modules, no transcoding, no cloud.
+Öz serverində saxlanan foto və video yedəkləmə — layihənin server yarısı.
+Node 24 + Fastify + SQLite; nativ modul yoxdur, transkodlaşdırma yoxdur, bulud
+yoxdur.
 
-Implements the API contract in §9 of the project document. **M1 is complete and
-verified** (§14): `curl` can pair, start an upload, send chunks, complete, and
-re-download the exact bytes.
+Layihə sənədinin §9 bölməsindəki API müqaviləsini həyata keçirir. **M1 tamamlanıb
+və yoxlanılıb** (§14): `curl` ilə cütləşmək, yükləmə seansı açmaq, parçaları
+göndərmək, seansı bağlamaq və eyni baytları geri endirmək mümkündür.
 
 ---
 
-## Why this shape
+## Niyə məhz bu quruluş
 
-The target box is a dual-core Sandy Bridge Pentium with 4 GB RAM and an HDD.
-Every choice below follows from that:
+Hədəf maşın iki nüvəli Sandy Bridge Pentium-dur — 4 GB RAM və adi HDD.
+Aşağıdakı hər qərar məhz bundan doğur:
 
-| Decision | Reason |
+| Qərar | Səbəb |
 |---|---|
-| `node:sqlite` (built in) instead of `better-sqlite3` | No C++ toolchain on the server, no compile step, no rebuild after a Node upgrade. |
-| Upload chunks stream straight to disk | A 2 GB video never lands in RAM. Measured peak: **83 MB RSS** while receiving 256 MB. |
-| `Range` served from the original bytes | The phone's hardware decoder does the work; the Pentium just reads the file. |
-| One ffmpeg worker at `nice -n 19` | Thumbnails must never compete with the API for the two cores or the disk head. |
-| WAL + `synchronous=NORMAL` | One writer, crash-safe enough, far fewer fsyncs on a slow disk. |
-| `last_seen_at` throttled to one write per minute per device | Keeps the HDD out of the request hot path. |
+| `better-sqlite3` yox, daxili `node:sqlite` | Serverdə C++ alət zənciri yoxdur, kompilyasiya addımı yoxdur, Node yeniləndikdən sonra yenidən qurma tələb olunmur. |
+| Yükləmə parçaları birbaşa diskə axır | 2 GB-lıq video heç vaxt RAM-a düşmür. Ölçülmüş pik: 256 MB qəbul edilərkən **83 MB RSS**. |
+| `Range` orijinal baytlardan verilir | İşi telefonun aparat dekoderi görür; Pentium sadəcə faylı oxuyur. |
+| `nice -n 19` ilə tək bir ffmpeg işçisi | Thumbnail-lər nə iki nüvə, nə də disk başlığı uğrunda API ilə yarışmamalıdır. |
+| WAL + `synchronous=NORMAL` | Tək yazıcı var, çökməyə qarşı kifayət qədər davamlıdır və yavaş diskdə xeyli az fsync deməkdir. |
+| `last_seen_at` cihaz başına dəqiqədə bir yazıya məhdudlaşdırılıb | HDD-ni sorğunun isti yolundan kənarda saxlayır. |
 
 ---
 
-## Requirements
+## Tələblər
 
-- Node **22.5+** (24 recommended) — `node:sqlite` ships with it
-- `ffmpeg` on `PATH` — thumbnails only; everything else works without it
-- A disk mounted at `/srv/kadr`
+- Node **22.5+** (24 tövsiyə olunur) — `node:sqlite` onunla birlikdə gəlir
+- `PATH`-də `ffmpeg` — yalnız thumbnail üçün; qalan hər şey onsuz da işləyir
+- `/srv/kadr`-a quraşdırılmış disk
 
-## Run it
+## İşə salmaq
 
 ```bash
 npm install
 npm start
 ```
 
-Create the first account from the console — it should not come from a web form
-on a box that is deliberately not exposed to the internet (§13):
+İlk hesabı konsoldan yarat — qəsdən internetə açılmayan bir maşında bu, veb
+formadan gəlməməlidir (§13):
 
 ```bash
 node src/cli.js user add hasan
 ```
 
-### Configuration
+### Konfiqurasiya
 
-All optional, all environment variables:
+Hamısı istəyə bağlıdır, hamısı mühit dəyişənidir:
 
-| Variable | Default | Notes |
+| Dəyişən | Susmaya görə | Qeyd |
 |---|---|---|
-| `KADR_DATA_DIR` | `/srv/kadr` (`./data` on Windows) | Blobs, thumbs, trash, database |
+| `KADR_DATA_DIR` | `/srv/kadr` (Windows-da `./data`) | Bloblar, thumbnail-lər, zibil qutusu, baza |
 | `KADR_DB_PATH` | `$KADR_DATA_DIR/kadr.db` | |
-| `KADR_HOST` | `0.0.0.0` | Set to `127.0.0.1` when Caddy fronts it |
+| `KADR_HOST` | `0.0.0.0` | Qarşısında Caddy dayananda `127.0.0.1` qoy |
 | `KADR_PORT` | `8787` | |
-| `KADR_MIN_FREE_BYTES` | 1 GiB | Reserve kept free; a session that would eat into it is refused with `507` before any bytes are sent |
-| `KADR_TRUST_PROXY` | `loopback` | Whose `X-Forwarded-For` to believe. See "Behind a proxy" |
+| `KADR_MIN_FREE_BYTES` | 1 GiB | Boş saxlanılan ehtiyat; bu ehtiyatı yeyəcək seans bir bayt belə göndərilməmiş `507` ilə rədd edilir |
+| `KADR_TRUST_PROXY` | `loopback` | Kimin `X-Forwarded-For`-una inanmaq lazımdır. Bax: "Proxy arxasında" |
 
 ---
 
-## Tests
+## Testlər
 
-Both suites drive the real HTTP surface with `curl` — no mocks.
+Hər iki dəst real HTTP səthini `curl` ilə sürür — heç bir mock yoxdur.
 
 ```bash
 bash test/e2e.sh
 ```
 
-94 checks: sign-in and lockout, token revocation, chunked upload with resume,
-idempotent re-sends, range gaps, hash mismatch, short chunks, dedupe, `Range`
-correctness, trash round trip, albums.
+94 yoxlama: giriş və kilidlənmə, token ləğvi, resume dəstəkli parçalı yükləmə,
+idempotent təkrar göndərmələr, aralıq boşluqları, hash uyğunsuzluğu, qısa
+parçalar, dedupe, `Range` düzgünlüyü, zibil qutusunun gedər-gəlməsi, albomlar.
 
 ```bash
 bash test/restart.sh
 ```
 
-Kills the server between chunks on an isolated port and proves the upload
-resumes from the SQLite row and the `.part` file alone.
+Serveri təcrid olunmuş portda parçalar arasında öldürür və yükləmənin yalnız
+SQLite sətri ilə `.part` faylı əsasında davam etdiyini sübut edir.
 
 ```bash
 bash test/hardening.sh
 ```
 
-16 checks: a full disk is refused before a byte is sent and leaves no partial
-file behind, the same upload succeeds once there is room, migrations do not
-re-run when the database is reopened, and the sign-in throttle locks out one
-address without touching another.
+16 yoxlama: dolu disk bir bayt göndərilməmiş rədd edilir və arxasında yarımçıq
+fayl qoymur, yer açılan kimi eyni yükləmə uğur qazanır, baza yenidən açılanda
+miqrasiyalar təkrar işləmir, və giriş məhdudlaşdırıcısı bir ünvanı kilidləyərkən
+digərinə toxunmur.
 
 ```bash
-node test/soak.mjs          # 10,000 assets
+node test/soak.mjs          # 10 000 asset
 COUNT=1000 node test/soak.mjs
 ```
 
-The §15 soak. Real uploads through the real API — check, session, chunk,
-complete — while watching memory, latency and database growth.
+§15-in yük testi. Real API üzərindən real yükləmələr — check, seans, parça,
+complete — yaddaşı, gecikməni və bazanın böyüməsini izləyərək.
 
-### Where it stands at 10,000 assets
+### 10 000 asset-də vəziyyət
 
 | | |
 |---|---|
-| Upload rate | 246 assets/sec (41 s for 10,000) |
-| Peak RSS | **184 MB** against the 300 MB budget |
-| Database | 7.8 MB |
-| 500-hash dedupe probe | 5–6 ms |
-| First sync page | 7 ms |
-| Full delta sync | 144 ms over 21 pages |
+| Yükləmə sürəti | saniyədə 246 asset (10 000 üçün 41 s) |
+| Pik RSS | 300 MB büdcəyə qarşı **184 MB** |
+| Baza | 7.8 MB |
+| 500 hash-lik dedupe yoxlaması | 5–6 ms |
+| İlk sinxronizasiya səhifəsi | 7 ms |
+| Tam delta sinxronizasiya | 21 səhifədə 144 ms |
 
-Six uploads run concurrently, which is more than one phone would do — the
-contention is deliberate, and it is what found the pagination bug below.
+Altı yükləmə eyni anda gedir — bu, bir telefonun edəcəyindən çoxdur. Rəqabət
+qəsdən yaradılıb və aşağıdakı səhifələmə qüsurunu məhz o tapıb.
 
 ---
 
-## API quick reference
+## API-yə qısa baxış
 
-Base path `/api/v1`. Responses are `{ "data": ... }` or `{ "error": { "code", "message" } }`.
+Əsas yol: `/api/v1`. Cavablar ya `{ "data": ... }`, ya da
+`{ "error": { "code", "message" } }` şəklindədir.
 
-### Sign in
+### Giriş
 
 ```bash
 curl -X POST localhost:8787/api/v1/auth/login \
@@ -124,12 +126,12 @@ curl -X POST localhost:8787/api/v1/auth/login \
   -d '{"username":"hasan","password":"…","deviceName":"Pixel 8"}'
 ```
 
-Anyone who signs in sees the same library (§16). The password is exchanged for a
-device token here and never sent again. Five wrong passwords from one address
-trigger a 15-minute lockout — see "Behind a proxy" for what "address" means once
-Caddy is in front.
+Giriş edən hər kəs eyni kitabxananı görür (§16). Parol burada cihaz tokeninə
+dəyişdirilir və bir daha göndərilmir. Bir ünvandan beş səhv parol 15 dəqiqəlik
+kilid yaradır — Caddy qarşıda duranda "ünvan"ın nə demək olduğu üçün "Proxy
+arxasında" bölməsinə bax.
 
-### Ask before sending
+### Göndərməzdən əvvəl soruş
 
 ```bash
 curl -X POST localhost:8787/api/v1/assets/check \
@@ -137,17 +139,17 @@ curl -X POST localhost:8787/api/v1/assets/check \
   -d '{"hashes":["<sha256>"]}'
 ```
 
-### Upload
+### Yükləmə
 
 ```bash
-# 1. open a session (returns uploadId; or alreadyExists if the blob is known)
+# 1. seans aç (uploadId qaytarır; blob tanışdırsa alreadyExists)
 curl -X POST localhost:8787/api/v1/uploads \
   -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
   -d '{"sha256":"…","sizeBytes":9961472,"filename":"clip.mp4","mimeType":"video/mp4"}'
 ```
 
 ```bash
-# 2. send a chunk (repeat; re-sending a held range is a no-op)
+# 2. parça göndər (təkrarla; artıq tutulmuş aralığı yenidən göndərmək təsirsizdir)
 curl -X PATCH "localhost:8787/api/v1/uploads/$ID" \
   -H "Authorization: Bearer $TOKEN" \
   -H 'Content-Type: application/octet-stream' \
@@ -156,17 +158,17 @@ curl -X PATCH "localhost:8787/api/v1/uploads/$ID" \
 ```
 
 ```bash
-# 3. after a crash, ask where you left off
+# 3. çökmədən sonra harada qaldığını soruş
 curl -H "Authorization: Bearer $TOKEN" "localhost:8787/api/v1/uploads/$ID"
 ```
 
 ```bash
-# 4. seal it — the server re-hashes and refuses a mismatch
+# 4. möhürlə — server yenidən hashlayır və uyğunsuzluğu rədd edir
 curl -X POST -H "Authorization: Bearer $TOKEN" \
   "localhost:8787/api/v1/uploads/$ID/complete"
 ```
 
-### Library
+### Kitabxana
 
 ```bash
 curl -H "Authorization: Bearer $TOKEN" "localhost:8787/api/v1/assets?since=0&limit=500"
@@ -177,13 +179,14 @@ curl -H "Authorization: Bearer $TOKEN" -H 'Range: bytes=0-1048575' \
   -o head.bin "localhost:8787/api/v1/assets/$ASSET/file"
 ```
 
-### Albums (§16.6)
+### Albomlar (§16.6)
 
-Manual and shared: §16 already made the library shared, so an album that lived
-on one phone only would contradict the library it belongs to.
+Əl ilə yaradılan və paylaşılan: §16 kitabxananı onsuz da paylaşılan etdi, ona
+görə yalnız bir telefonda yaşayan albom aid olduğu kitabxana ilə ziddiyyət
+təşkil edərdi.
 
 ```bash
-# create, fill, and read back
+# yarat, doldur və geri oxu
 curl -X POST -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
   -d '{"name":"Georgia 2024"}' "localhost:8787/api/v1/albums"
 
@@ -194,130 +197,132 @@ curl -H "Authorization: Bearer $TOKEN" "localhost:8787/api/v1/albums?since=0"
 curl -H "Authorization: Bearer $TOKEN" "localhost:8787/api/v1/album-items?since=0"
 ```
 
-Two delta streams, not one. Albums and membership move at completely different
-rates — renaming an album should not drag five thousand membership rows across
-the wire — and each keeps its own `updated_at` counter, so an upload does not
-push every album cursor forward.
+Bir yox, iki delta axını. Albomlar və üzvlük tamamilə fərqli sürətlərlə dəyişir
+— albomun adını dəyişmək beş min üzvlük sətrini şəbəkə üzərindən sürükləməməlidir
+— və hər biri öz `updated_at` sayğacını saxlayır, ona görə bir yükləmə bütün
+albom kursorlarını irəli itələmir.
 
-There is no "album contents" endpoint on purpose. Clients already mirror the
-library, and `album-items` gives them the relationship; the contents are a join
-they can do locally. Trash needed an endpoint of its own only because delta sync
-carries nothing there but tombstones.
+"Albomun məzmunu" adlı endpoint qəsdən yoxdur. Müştərilər onsuz da kitabxananı
+güzgüləyir, `album-items` isə onlara əlaqəni verir; məzmun isə yerli olaraq edə
+biləcəkləri bir birləşdirmədir. Zibil qutusuna ayrıca endpoint yalnız ona görə
+lazım oldu ki, delta sinxronizasiya oraya tombstone-dan başqa heç nə daşımır.
 
-Removing a photo from an album **tombstones** the row (`removed: true`) instead
-of deleting it, for the same reason assets are tombstoned: a row that is simply
-gone is not a change any client can see, so the photo would sit in that album
-forever on every phone that had already synced it. Adding it back clears the
-tombstone rather than colliding with the primary key.
+Şəkli albomdan çıxarmaq sətri silmir, ona **tombstone** qoyur (`removed: true`)
+— eyni səbəbdən ki, asset-lərə də tombstone qoyulur: sadəcə yox olmuş sətir heç
+bir müştərinin görə biləcəyi dəyişiklik deyil, ona görə şəkil artıq sinxronlaşmış
+hər telefonda o albomda əbədi qalardı. Geri əlavə etmək isə açar münaqişəsi
+yaratmır, tombstone-u təmizləyir.
 
-Deleting an **asset** leaves its album rows alone, so restoring it from the
-trash puts it back in the albums it was in. Freeing local space never touches
-membership at all — that is a phone-side deletion and the server still has the
-file.
+**Asset**-i silmək onun albom sətirlərinə toxunmur, ona görə zibil qutusundan
+bərpa etmək şəkli əvvəlki albomlarına qaytarır. Yerli yer boşaltmaq üzvlüyə
+ümumiyyətlə toxunmur — o, telefon tərəfindəki silmədir və fayl hələ də
+serverdədir.
 
-### Behind a proxy
+### Proxy arxasında
 
-Caddy terminates TLS and proxies in from `127.0.0.1`, so the API must be told
-whose `X-Forwarded-For` to believe or every request looks like it came from the
-same address — and §13's per-IP sign-in throttle collapses into one global
-counter, where a single wrong password locks out every phone in the house.
+Caddy TLS-i özündə bitirir və `127.0.0.1`-dən proxy edir, ona görə API-yə kimin
+`X-Forwarded-For`-una inanacağı deyilməlidir — əks halda hər sorğu eyni ünvandan
+gəlmiş kimi görünür və §13-ün IP başına giriş məhdudlaşdırıcısı tək bir qlobal
+sayğaca çevrilir, orada isə bircə səhv parol evdəki bütün telefonları kilidləyər.
 
-`KADR_TRUST_PROXY` defaults to `loopback`: only a proxy on this machine is
-believed. Deliberately not `true` — if the API is ever reachable directly, a
-header from the LAN must not be able to forge an address. `hardening.sh` §4
-pins both halves: one address gets locked out, another is unaffected.
+`KADR_TRUST_PROXY` susmaya görə `loopback`-dir: yalnız bu maşındakı proxy-yə
+inanılır. Qəsdən `true` deyil — API nə vaxtsa birbaşa əlçatan olarsa, LAN-dan
+gələn başlıq ünvanı saxtalaşdıra bilməməlidir. `hardening.sh` §4 hər iki yarını
+sabitləyir: bir ünvan kilidlənir, digəri toxunulmamış qalır.
 
-### Error codes
+### Xəta kodları
 
-| Code | Status | Meaning |
+| Kod | Status | Mənası |
 |---|---|---|
-| `ALBUM_DELETED` | 410 | The album is tombstoned; it cannot be edited |
-| `TOO_MANY` | 400 | More than 500 assets in one album request |
-| `RANGE_GAP` | 409 | Chunk starts past `receivedBytes`; resume from there |
-| `SESSION_RESET` | 409 | The partial file is gone; restart at byte 0 |
-| `LENGTH_MISMATCH` | 400 | Fewer bytes arrived than `Content-Range` promised |
-| `HASH_MISMATCH` | 409 | Reassembled file hashes wrong; session reset to 0 |
-| `INCOMPLETE` | 409 | `complete` called before all bytes arrived |
-| `DISK_FULL` | 507 | `ENOSPC` — surfaced, never a silent stall |
-| `LOGIN_LOCKED` | 429 | Five failed sign-in attempts from this IP |
-| `THUMB_UNAVAILABLE` | 503 | ffmpeg missing or the frame could not be extracted |
+| `ALBUM_DELETED` | 410 | Albom tombstone-lanıb; redaktə edilə bilməz |
+| `TOO_MANY` | 400 | Bir albom sorğusunda 500-dən çox asset |
+| `RANGE_GAP` | 409 | Parça `receivedBytes`-dan sonra başlayır; oradan davam et |
+| `SESSION_RESET` | 409 | Yarımçıq fayl yoxa çıxıb; sıfırıncı baytdan başla |
+| `LENGTH_MISMATCH` | 400 | `Content-Range`-in vəd etdiyindən az bayt gəldi |
+| `HASH_MISMATCH` | 409 | Yığılmış faylın hash-i səhvdir; seans sıfırlanır |
+| `INCOMPLETE` | 409 | Bütün baytlar gəlməmiş `complete` çağırılıb |
+| `DISK_FULL` | 507 | `ENOSPC` — üzə çıxarılır, heç vaxt səssiz donma deyil |
+| `LOGIN_LOCKED` | 429 | Bu IP-dən beş uğursuz giriş cəhdi |
+| `THUMB_UNAVAILABLE` | 503 | ffmpeg yoxdur, ya da kadr çıxarıla bilmədi |
 
 ---
 
-## The bug the soak found
+## Yük testinin tapdığı qüsur
 
-At 10,000 assets the delta sync returned **9,995 rows**. Five photos a client
-would never have seen.
+10 000 asset-də delta sinxronizasiya **9 995 sətir** qaytardı. Müştərinin heç
+vaxt görməyəcəyi beş şəkil.
 
-`GET /assets?since=X` pages with `WHERE updated_at > ? ORDER BY updated_at`, and
-the cursor is the last row's `updated_at`. Several assets completing inside the
-same millisecond share a timestamp; when such a group straddles a page boundary,
-`> cursor` skips whatever is left of it. Nothing errors, nothing logs — the
-library is just quietly short.
+`GET /assets?since=X` səhifələməni `WHERE updated_at > ? ORDER BY updated_at`
+ilə edir və kursor sonuncu sətrin `updated_at` dəyəridir. Eyni millisaniyə
+ərzində tamamlanan bir neçə asset eyni zaman möhürünü bölüşür; belə bir qrup
+səhifə sərhədinə düşəndə `> cursor` onun qalan hissəsini atlayır. Nə xəta baş
+verir, nə də jurnala nəsə düşür — kitabxana sadəcə səssizcə əskik olur.
 
-The fix keeps §9's contract intact. `updated_at` is now handed out by
-`nextUpdatedAt()` as `max(now, highest + 1)`, so ties cannot happen and the
-column still means what §8 says it means. The soak asserts the full page-through
-returns exactly as many rows as were uploaded, which is the assertion that
-caught it.
+Düzəliş §9-un müqaviləsini toxunulmaz saxlayır. `updated_at` indi
+`nextUpdatedAt()` tərəfindən `max(now, ən yüksək + 1)` kimi verilir, yəni
+bərabərlik mümkün deyil və sütun hələ də §8-in dediyi mənanı daşıyır. Yük testi
+tam səhifələmənin dəqiq yüklənən qədər sətir qaytardığını yoxlayır — qüsuru tutan
+məhz bu yoxlamadır.
 
-## Two behaviours worth knowing
+## Bilməyə dəyən iki davranış
 
-**A trashed asset counts as missing.** `/assets/check` only reports live assets
-as present. If a soft-deleted asset were reported as present, the phone could
-mark it `VERIFIED`, free up local space, and then lose the file for good when
-the trash purges at 30 days. Re-uploading a trashed asset restores the existing
-row instead of creating a second one.
+**Zibil qutusundakı asset itkin sayılır.** `/assets/check` yalnız canlı
+asset-ləri mövcud kimi bildirir. Yumşaq silinmiş asset mövcud kimi göstərilsəydi,
+telefon onu `VERIFIED` işarələyib yerli yeri boşalda bilərdi və zibil qutusu 30
+gündən sonra təmizlənəndə fayl birdəfəlik itərdi. Zibil qutusundakı asset-i
+yenidən yükləmək ikinci sətir yaratmır, mövcud sətri bərpa edir.
 
-**`complete` is the only thing that trusts nothing.** The client's declared hash
-is treated as a claim until the server re-reads the assembled file and hashes it
-itself. A mismatch resets the session to zero rather than writing a bad blob.
+**`complete` heç nəyə inanmayan yeganə şeydir.** Müştərinin bildirdiyi hash o
+vaxta qədər sadəcə iddiadır ki, server yığılmış faylı yenidən oxuyub özü
+hashlasın. Uyğunsuzluq pis blob yazmaq əvəzinə seansı sıfırlayır.
 
 ---
 
-## Deploying on Ubuntu
+## Ubuntu-da yerləşdirmə
 
-Clone this repository on the server and run the installer:
+Bu reponu serverdə klonla və quraşdırıcını işə sal:
 
 ```bash
 sudo bash server/deploy/install.sh
 ```
 
-It installs Node, ffmpeg and Caddy, creates the `kadr` service account, copies
-the app to `/opt/kadr/server`, installs the systemd unit, writes the Caddyfile,
-opens 443 and then checks that the service actually answers. Running it again
-upgrades in place; it never touches `/srv/kadr`, where the photos live.
+Skript Node, ffmpeg və Caddy quraşdırır, `kadr` servis hesabını yaradır, tətbiqi
+`/opt/kadr/server`-ə köçürür, systemd unit-ini quraşdırır, Caddyfile yazır,
+443-ü açır və sonda servisin doğrudan cavab verdiyini yoxlayır. Təkrar
+işlədilməsi yerində yeniləmə edir; `/srv/kadr`-a — şəkillərin yaşadığı yerə —
+heç vaxt toxunmur.
 
-`KADR_SITE=photos.lan` overrides the hostname Caddy serves, `KADR_DATA_DIR`
-the data directory.
+`KADR_SITE=photos.lan` Caddy-nin xidmət etdiyi host adını, `KADR_DATA_DIR` isə
+məlumat qovluğunu əvəz edir.
 
-**Node.** The installer refuses anything older than 22.13 and installs 24.x
-instead. `node:sqlite` is the whole database layer, and 22.x builds below that
-keep it behind `--experimental-sqlite`, which the unit does not pass — an
-out-of-date Node does not degrade, it fails to boot.
+**Node.** Quraşdırıcı 22.13-dən köhnə hər şeyi rədd edir və əvəzinə 24.x
+quraşdırır. Bütün baza qatı `node:sqlite` üzərində qurulub, bu versiyadan aşağı
+22.x buraxılışları isə onu `--experimental-sqlite` arxasında saxlayır — unit isə
+o bayrağı ötürmür. Yəni köhnəlmiş Node zəifləyərək işləmir, sadəcə heç qalxmır.
 
-Three things the script deliberately leaves to a human, and prints at the end:
-creating the first account (the password is typed at a terminal), pointing the
-hostname at the box, and installing Caddy's root certificate on the phone.
+Skriptin qəsdən insana buraxdığı və sonda ekrana yazdığı üç şey: ilk hesabın
+yaradılması (parol terminaldan yazılır), host adının maşına yönləndirilməsi və
+Caddy-nin kök sertifikatının telefona quraşdırılması.
 
-Doing it by hand instead:
+Əl ilə etmək istəsən:
 
 ```bash
 sudo cp deploy/kadr.service /etc/systemd/system/
 sudo systemctl enable --now kadr
-journalctl -u kadr -f          # watch it come up
+journalctl -u kadr -f          # qalxmasını izlə
 ```
 
-TLS terminates at Caddy (see `deploy/Caddyfile`), which is why the unit binds
-Kadr to `127.0.0.1`. Do not port-forward this to the open internet — reach it
-from outside over Tailscale or WireGuard (§13).
+TLS Caddy-də bitir (bax: `deploy/Caddyfile`) — unit-in Kadr-ı `127.0.0.1`-ə
+bağlamasının səbəbi budur. Bunu açıq internetə port-forward etmə; kənardan
+Tailscale və ya WireGuard üzərindən çat (§13).
 
 ---
 
-## Not done yet
+## Hələ edilməyib
 
-- `GET /assets/{id}/thumb` works, but generation needs `ffmpeg` installed; the
-  low-priority background pre-generation worker and its `--dry-run` mode (§17)
-  are not built. Thumbnails are generated lazily on first request.
-- No QR page for the server address yet; it is typed in by hand (§12 onboarding).
-- No TLS in-process; Caddy is expected to front it.
+- `GET /assets/{id}/thumb` işləyir, amma yaradılma üçün `ffmpeg` quraşdırılmış
+  olmalıdır; aşağı prioritetli fon ön-yaratma işçisi və onun `--dry-run` rejimi
+  (§17) qurulmayıb. Thumbnail-lər ilk sorğuda tənbəl şəkildə yaradılır.
+- Server ünvanı üçün hələ QR səhifəsi yoxdur; ünvan əl ilə yazılır (§12,
+  onboarding).
+- Proses daxilində TLS yoxdur; qarşıda Caddy-nin dayanacağı gözlənilir.
