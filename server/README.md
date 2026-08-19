@@ -277,15 +277,30 @@ itself. A mismatch resets the session to zero rather than writing a bad blob.
 
 ## Deploying on Ubuntu
 
+Clone this repository on the server and run the installer:
+
 ```bash
-sudo apt install -y nodejs ffmpeg          # Node 22+; use NodeSource if the repo is older
-sudo useradd --system --home /srv/kadr --shell /usr/sbin/nologin kadr
-sudo mkdir -p /srv/kadr /opt/kadr
-sudo chown kadr:kadr /srv/kadr
+sudo bash server/deploy/install.sh
 ```
 
-Copy the `server/` directory to `/opt/kadr/server`, run `npm ci --omit=dev`,
-then install the unit:
+It installs Node, ffmpeg and Caddy, creates the `kadr` service account, copies
+the app to `/opt/kadr/server`, installs the systemd unit, writes the Caddyfile,
+opens 443 and then checks that the service actually answers. Running it again
+upgrades in place; it never touches `/srv/kadr`, where the photos live.
+
+`KADR_SITE=photos.lan` overrides the hostname Caddy serves, `KADR_DATA_DIR`
+the data directory.
+
+**Node.** The installer refuses anything older than 22.13 and installs 24.x
+instead. `node:sqlite` is the whole database layer, and 22.x builds below that
+keep it behind `--experimental-sqlite`, which the unit does not pass — an
+out-of-date Node does not degrade, it fails to boot.
+
+Three things the script deliberately leaves to a human, and prints at the end:
+creating the first account (the password is typed at a terminal), pointing the
+hostname at the box, and installing Caddy's root certificate on the phone.
+
+Doing it by hand instead:
 
 ```bash
 sudo cp deploy/kadr.service /etc/systemd/system/
