@@ -8,6 +8,8 @@ import com.kadr.app.data.prefs.KadrSettings
 import com.kadr.app.data.prefs.SettingsStore
 import com.kadr.app.data.remote.HealthResponse
 import com.kadr.app.data.remote.TrashedAssetDto
+import com.kadr.app.data.repo.AlbumRepository
+import com.kadr.app.data.repo.BackupRepository
 import com.kadr.app.data.repo.FreeUpPlan
 import com.kadr.app.data.repo.LibraryRepository
 import com.kadr.app.data.repo.SpaceRepository
@@ -19,6 +21,9 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import javax.inject.Inject
+import dagger.hilt.android.qualifiers.ApplicationContext
+import com.kadr.app.R
+import android.content.Context
 
 data class TrashUiState(
     val loading: Boolean = false,
@@ -31,9 +36,12 @@ data class TrashUiState(
 class SettingsViewModel @Inject constructor(
     private val settingsStore: SettingsStore,
     private val library: LibraryRepository,
+    private val albums: AlbumRepository,
+    private val backup: BackupRepository,
     private val space: SpaceRepository,
     private val scheduler: BackupScheduler,
     private val videoCache: VideoCache,
+    @param:ApplicationContext private val context: Context,
 ) : ViewModel() {
 
     val settings: StateFlow<KadrSettings> = settingsStore.settings
@@ -80,7 +88,7 @@ class SettingsViewModel @Inject constructor(
         viewModelScope.launch {
             videoCache.clear()
             _cacheBytes.value = videoCache.usedBytes()
-            _message.value = "Media cache cleared."
+            _message.value = context.getString(R.string.settings_msg_cache_cleared)
         }
     }
 
@@ -101,7 +109,38 @@ class SettingsViewModel @Inject constructor(
         scheduler.sync()
     }
 
-    fun setIncludeVideos(enabled: Boolean) = settingsStore.setIncludeVideos(enabled)
+    fun setIncludeVideos(enabled: Boolean) {
+        settingsStore.setIncludeVideos(enabled)
+        // Turning the rule back on has to bring what it parked back with it —
+        // nothing else ever moves a row out of SKIPPED.
+        if (enabled) viewModelScope.launch { backup.requeueSkipped() }
+    }
+
+    // ─── Unpairing ──────────────────────────────────────────────────────────
+
+    /**
+     * Signs this device out and forgets the server it was signed in to.
+     *
+     * The screen only navigated to the login form before, which left the token,
+     * the mirrored library and the scheduled batch exactly where they were: the
+     * app looked signed out and carried on backing up.
+     *
+     * [onDone] runs after the credentials are gone rather than before, so the
+     * login screen cannot be shown over a device that is still paired.
+     */
+    fun unpair(onDone: () -> Unit) {
+        viewModelScope.launch {
+            library.forgetServer()
+            albums.clearCache()
+            // Before stopping: the scheduler re-arms itself, and only an
+            // unpaired device makes it cancel instead.
+            settingsStore.clearPairing()
+            scheduler.stop()
+            _health.value = null
+            _trash.value = TrashUiState()
+            onDone()
+        }
+    }
 
     fun setDynamicColor(enabled: Boolean) = settingsStore.setDynamicColor(enabled)
 
@@ -139,11 +178,11 @@ class SettingsViewModel @Inject constructor(
         viewModelScope.launch {
             library.restore(assetId)
                 .onSuccess {
-                    _message.value = "Restored."
+                    _message.value = context.getString(R.string.settings_msg_restored)
                     loadTrash()
                     library.sync()
                 }
-                .onFailure { _message.value = "Restore failed: ${it.message}" }
+                .onFailure { _message.value = context.getString(R.string.settings_msg_restore_failed, it.message.orEmpty()) }
         }
     }
 
@@ -157,12 +196,12 @@ class SettingsViewModel @Inject constructor(
             space.plan()
                 .onSuccess { plan ->
                     if (plan.isEmpty) {
-                        _message.value = "Nothing is safe to remove yet."
+                        _message.value = context.getString(R.string.settings_msg_nothing_safe)
                     } else {
                         _freeUpPlan.value = plan
                     }
                 }
-                .onFailure { _message.value = "Could not check with the server: ${it.message}" }
+                .onFailure { _message.value = context.getString(R.string.settings_msg_check_failed, it.message.orEmpty()) }
             _busy.value = false
         }
     }
@@ -179,9 +218,9 @@ class SettingsViewModel @Inject constructor(
             val freed = space.markFreed(plan)
             _freeUpPlan.value = null
             _message.value = if (freed > 0) {
-                "Freed $freed file${if (freed == 1) "" else "s"}."
+                context.resources.getQuantityString(R.plurals.common_freed_files, freed, freed)
             } else {
-                "Nothing was removed."
+                context.getString(R.string.common_nothing_removed)
             }
         }
     }
@@ -194,7 +233,8 @@ class SettingsViewModel @Inject constructor(
             val freed = space.markFreed(plan)
             _freeUpPlan.value = null
             _busy.value = false
-            _message.value = "Freed $freed files."
+            _message.value =
+                context.resources.getQuantityString(R.plurals.common_freed_files, freed, freed)
         }
     }
 }

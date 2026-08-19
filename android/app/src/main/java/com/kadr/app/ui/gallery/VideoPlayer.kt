@@ -25,9 +25,9 @@ import androidx.compose.material.icons.filled.Forward10
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Replay10
+import androidx.compose.material.icons.automirrored.filled.VolumeOff
+import androidx.compose.material.icons.automirrored.filled.VolumeUp
 import androidx.compose.material.icons.filled.Speed
-import androidx.compose.material.icons.filled.VolumeOff
-import androidx.compose.material.icons.filled.VolumeUp
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -39,6 +39,7 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -46,23 +47,27 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.media3.common.C
 import androidx.media3.common.MediaItem
 import androidx.media3.common.PlaybackParameters
 import androidx.media3.common.Player
+import androidx.media3.common.util.UnstableApi
 import androidx.media3.ui.AspectRatioFrameLayout
 import androidx.media3.ui.PlayerView
 import coil3.compose.AsyncImage
 import com.kadr.app.data.local.GalleryItem
 import com.kadr.app.data.video.PlayerFactory
 import com.kadr.app.ui.formatDuration
+import com.kadr.app.R
 import com.kadr.app.ui.theme.KadrAmber
 import kotlinx.coroutines.delay
 import kotlin.math.abs
@@ -77,6 +82,8 @@ private val SPEEDS = listOf(0.5f, 1f, 1.5f, 2f)
  * you where you were. A poster frame sits under the surface until the decoder
  * produces its first frame, which is what stops the black flash on open.
  */
+// PlayerView and its shutter colour are media3's own unstable surface.
+@androidx.annotation.OptIn(UnstableApi::class)
 @Composable
 fun VideoPlayer(
     item: GalleryItem,
@@ -100,12 +107,18 @@ fun VideoPlayer(
     var position by remember(item.key) { mutableLongStateOf(0L) }
     var duration by remember(item.key) { mutableLongStateOf(0L) }
     var muted by remember { mutableStateOf(false) }
-    var speedIndex by remember { mutableStateOf(1) }
+    var speedIndex by remember { mutableIntStateOf(1) }
     var scrubbing by remember(item.key) { mutableStateOf(false) }
 
     // Transient overlays for the gesture feedback §11 asks for.
     var seekHint by remember { mutableStateOf<String?>(null) }
     var levelHint by remember { mutableStateOf<Pair<String, Float>?>(null) }
+
+    // Gesture callbacks run outside composition, so their labels are read here.
+    val seekForwardLabel = stringResource(R.string.video_seek_forward)
+    val seekBackLabel = stringResource(R.string.video_seek_back)
+    val brightnessLabel = stringResource(R.string.video_brightness)
+    val volumeLabel = stringResource(R.string.video_volume)
 
     DisposableEffect(lifecycleOwner, item.key, active, mediaUri) {
         fun open() {
@@ -193,7 +206,7 @@ fun VideoPlayer(
                         val target = (it.currentPosition + if (forward) 10_000 else -10_000)
                             .coerceIn(0L, it.duration.coerceAtLeast(0L))
                         it.seekTo(target)
-                        seekHint = if (forward) "+10s" else "−10s"
+                        seekHint = if (forward) seekForwardLabel else seekBackLabel
                     }
                 },
                 onScrub = { fraction ->
@@ -214,14 +227,14 @@ fun VideoPlayer(
                     val next = (current + delta).coerceIn(0.01f, 1f)
                     attrs.screenBrightness = next
                     window.attributes = attrs
-                    levelHint = "Brightness" to next
+                    levelHint = brightnessLabel to next
                 },
                 onVolume = { delta ->
                     activePlayer?.let {
                         val next = (it.volume + delta).coerceIn(0f, 1f)
                         it.volume = next
                         muted = next == 0f
-                        levelHint = "Volume" to next
+                        levelHint = volumeLabel to next
                     }
                 },
             ),
@@ -309,7 +322,12 @@ fun VideoPlayer(
                     // this nudges by roughly one frame at 30 fps.
                     activePlayer?.let {
                         it.playWhenReady = false
-                        it.seekTo((it.currentPosition + 33).coerceAtMost(it.duration))
+                        val next = it.currentPosition + 33
+                        // duration is C.TIME_UNSET until the source has been
+                        // read; clamping to that would seek to a vast negative
+                        // position instead of nudging forward.
+                        val total = it.duration
+                        it.seekTo(if (total == C.TIME_UNSET) next else next.coerceAtMost(total))
                     }
                 },
                 onToggleMute = {
@@ -366,7 +384,11 @@ private fun PlaybackControls(
             IconButton(onClick = onPlayPause) {
                 Icon(
                     imageVector = if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
-                    contentDescription = if (isPlaying) "Pause" else "Play",
+                    contentDescription = if (isPlaying) {
+                        stringResource(R.string.video_pause)
+                    } else {
+                        stringResource(R.string.video_play)
+                    },
                     tint = Color.White,
                 )
             }
@@ -382,7 +404,7 @@ private fun PlaybackControls(
                 IconButton(onClick = onStepFrame) {
                     Icon(
                         imageVector = Icons.Default.Forward10,
-                        contentDescription = "Step one frame",
+                        contentDescription = stringResource(R.string.video_step_frame),
                         tint = Color.White,
                         modifier = Modifier.size(20.dp),
                     )
@@ -393,7 +415,7 @@ private fun PlaybackControls(
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Icon(
                         imageVector = Icons.Default.Speed,
-                        contentDescription = "Playback speed",
+                        contentDescription = stringResource(R.string.video_playback_speed),
                         tint = Color.White,
                         modifier = Modifier.size(18.dp),
                     )
@@ -407,8 +429,16 @@ private fun PlaybackControls(
 
             IconButton(onClick = onToggleMute) {
                 Icon(
-                    imageVector = if (muted) Icons.Default.VolumeOff else Icons.Default.VolumeUp,
-                    contentDescription = if (muted) "Unmute" else "Mute",
+                    imageVector = if (muted) {
+                        Icons.AutoMirrored.Filled.VolumeOff
+                    } else {
+                        Icons.AutoMirrored.Filled.VolumeUp
+                    },
+                    contentDescription = if (muted) {
+                        stringResource(R.string.video_unmute)
+                    } else {
+                        stringResource(R.string.video_mute)
+                    },
                     tint = Color.White,
                 )
             }

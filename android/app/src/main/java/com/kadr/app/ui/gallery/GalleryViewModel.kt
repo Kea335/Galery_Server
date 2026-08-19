@@ -36,6 +36,9 @@ import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.util.Locale
 import javax.inject.Inject
+import dagger.hilt.android.qualifiers.ApplicationContext
+import com.kadr.app.R
+import android.content.Context
 
 /** A timeline row: either a month divider or a photo cell. */
 sealed interface TimelineEntry {
@@ -52,6 +55,7 @@ class GalleryViewModel @Inject constructor(
     /** Handed to the screens so they can build their own short-lived players. */
     val playerFactory: PlayerFactory,
     settingsStore: SettingsStore,
+    @param:ApplicationContext private val context: Context,
 ) : ViewModel() {
 
     /**
@@ -134,13 +138,13 @@ class GalleryViewModel @Inject constructor(
 
     fun refresh() {
         viewModelScope.launch {
-            library.sync().onFailure { _message.value = "Sync failed: ${it.message}" }
+            library.sync().onFailure { _message.value = context.getString(R.string.timeline_msg_sync_failed, it.message.orEmpty()) }
         }
     }
 
     fun backupNow() {
         scheduler.backupNow()
-        _message.value = "Backup queued."
+        _message.value = context.getString(R.string.timeline_msg_backup_queued)
     }
 
     // ─── Free up space, for the selection (§10.7, §12) ──────────────────────
@@ -154,7 +158,7 @@ class GalleryViewModel @Inject constructor(
         if (_busy.value) return
         val ids = _selection.value.mapNotNull(::localAssetId)
         if (ids.isEmpty()) {
-            _message.value = "Nothing here is backed up yet, so nothing can be freed."
+            _message.value = context.getString(R.string.timeline_msg_nothing_backed_up)
             return
         }
 
@@ -163,12 +167,12 @@ class GalleryViewModel @Inject constructor(
             space.plan(ids)
                 .onSuccess { plan ->
                     if (plan.isEmpty) {
-                        _message.value = "The server could not vouch for any of these yet."
+                        _message.value = context.getString(R.string.timeline_msg_no_vouch)
                     } else {
                         _freeUpPlan.value = plan
                     }
                 }
-                .onFailure { _message.value = "Could not check with the server: ${it.message}" }
+                .onFailure { _message.value = context.getString(R.string.timeline_msg_check_failed, it.message.orEmpty()) }
             _busy.value = false
         }
     }
@@ -186,9 +190,9 @@ class GalleryViewModel @Inject constructor(
             _freeUpPlan.value = null
             clearSelection()
             _message.value = if (freed > 0) {
-                "Freed $freed file${if (freed == 1) "" else "s"}."
+                context.resources.getQuantityString(R.plurals.common_freed_files, freed, freed)
             } else {
-                "Nothing was removed."
+                context.getString(R.string.common_nothing_removed)
             }
         }
     }
@@ -202,7 +206,8 @@ class GalleryViewModel @Inject constructor(
             _freeUpPlan.value = null
             _busy.value = false
             clearSelection()
-            _message.value = "Freed $freed files."
+            _message.value =
+                context.resources.getQuantityString(R.plurals.common_freed_files, freed, freed)
         }
     }
 

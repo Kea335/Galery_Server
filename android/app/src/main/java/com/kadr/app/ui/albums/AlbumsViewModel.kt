@@ -17,11 +17,15 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import javax.inject.Inject
+import dagger.hilt.android.qualifiers.ApplicationContext
+import com.kadr.app.R
+import android.content.Context
 
 @HiltViewModel
 class AlbumsViewModel @Inject constructor(
     private val albums: AlbumRepository,
     private val library: LibraryRepository,
+    @param:ApplicationContext private val context: Context,
 ) : ViewModel() {
 
     val list: StateFlow<List<AlbumSummary>> = albums.observeAlbums()
@@ -43,25 +47,25 @@ class AlbumsViewModel @Inject constructor(
 
     fun refresh() {
         viewModelScope.launch {
-            albums.sync().onFailure { _message.value = "Could not read albums: ${it.message}" }
+            albums.sync().onFailure { _message.value = context.getString(R.string.albums_msg_read_failed, it.message.orEmpty()) }
         }
     }
 
     fun create(name: String) = guarded {
         albums.create(name)
-            .onSuccess { _message.value = "Album created." }
-            .onFailure { _message.value = "Could not create it: ${it.message}" }
+            .onSuccess { _message.value = context.getString(R.string.albums_msg_created) }
+            .onFailure { _message.value = context.getString(R.string.albums_msg_create_failed, it.message.orEmpty()) }
     }
 
     fun rename(id: String, name: String) = guarded {
         albums.rename(id, name)
-            .onFailure { _message.value = "Could not rename it: ${it.message}" }
+            .onFailure { _message.value = context.getString(R.string.albums_msg_rename_failed, it.message.orEmpty()) }
     }
 
     fun delete(id: String) = guarded {
         albums.delete(id)
-            .onSuccess { _message.value = "Album deleted. The photos are untouched." }
-            .onFailure { _message.value = "Could not delete it: ${it.message}" }
+            .onSuccess { _message.value = context.getString(R.string.albums_msg_deleted) }
+            .onFailure { _message.value = context.getString(R.string.albums_msg_delete_failed, it.message.orEmpty()) }
     }
 
     /**
@@ -76,17 +80,20 @@ class AlbumsViewModel @Inject constructor(
             .onSuccess { result ->
                 _message.value = when {
                     result.added == 0 ->
-                        "Nothing was added — these are still waiting to be backed up."
+                        context.getString(R.string.albums_msg_none_added)
 
                     result.notBackedUp > 0 ->
-                        "${result.added} added. ${result.notBackedUp} are still waiting to be " +
-                            "backed up, so they could not go in yet."
+                        context.getString(
+                            R.string.albums_msg_added_partial,
+                            result.added,
+                            result.notBackedUp,
+                        )
 
-                    else -> "${result.added} added."
+                    else -> context.getString(R.string.albums_msg_added, result.added)
                 }
                 onDone()
             }
-            .onFailure { _message.value = "Could not add them: ${it.message}" }
+            .onFailure { _message.value = context.getString(R.string.albums_msg_add_failed, it.message.orEmpty()) }
     }
 
     /** Contents of one album, paged, in the timeline's own order. */
@@ -105,22 +112,22 @@ class AlbumsViewModel @Inject constructor(
     fun setCover(albumId: String, item: GalleryItem) = guarded {
         val assetId = item.remoteId
         if (assetId == null) {
-            _message.value = "That photo is not on the server yet, so it cannot be the cover."
+            _message.value = context.getString(R.string.albums_msg_cover_not_on_server)
             return@guarded
         }
         albums.setCover(albumId, assetId)
-            .onSuccess { _message.value = "Cover set." }
-            .onFailure { _message.value = "Could not set the cover: ${it.message}" }
+            .onSuccess { _message.value = context.getString(R.string.albums_msg_cover_set) }
+            .onFailure { _message.value = context.getString(R.string.albums_msg_cover_failed, it.message.orEmpty()) }
     }
 
     fun removeFromAlbum(albumId: String, item: GalleryItem) = guarded {
         val assetId = item.remoteId
         if (assetId == null) {
-            _message.value = "That photo is not on the server, so it is not in the album."
+            _message.value = context.getString(R.string.albums_msg_not_on_server)
             return@guarded
         }
         albums.removeItem(albumId, assetId)
-            .onFailure { _message.value = "Could not take it out: ${it.message}" }
+            .onFailure { _message.value = context.getString(R.string.albums_msg_take_out_failed, it.message.orEmpty()) }
     }
 
     fun thumbnailModel(item: GalleryItem): Any? =
@@ -130,12 +137,20 @@ class AlbumsViewModel @Inject constructor(
     fun coverModel(album: AlbumSummary): Any? =
         album.coverLocalUri ?: album.coverRemoteId?.let(library::thumbnailUrl)
 
+    /**
+     * `finally`, because `_busy` is what gates every album action: a single
+     * throw anywhere in here — including from a caller's `onDone` — would
+     * otherwise leave the screen permanently unable to do anything.
+     */
     private fun guarded(block: suspend () -> Unit) {
         if (_busy.value) return
         viewModelScope.launch {
             _busy.value = true
-            block()
-            _busy.value = false
+            try {
+                block()
+            } finally {
+                _busy.value = false
+            }
         }
     }
 }

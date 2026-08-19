@@ -30,10 +30,13 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.pluralStringResource
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.kadr.app.R
 import com.kadr.app.ui.formatBytes
 import com.kadr.app.ui.rememberHaptics
 import com.kadr.app.ui.theme.KadrAmber
@@ -71,10 +74,10 @@ fun TrashScreen(
         snackbarHost = { SnackbarHost(snackbarHostState) },
         topBar = {
             TopAppBar(
-                title = { Text("Trash") },
+                title = { Text(stringResource(R.string.trash_title)) },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.common_back))
                     }
                 },
             )
@@ -88,7 +91,7 @@ fun TrashScreen(
                 )
 
                 trash.error != null -> Text(
-                    text = "Could not reach the server: ${trash.error}",
+                    text = stringResource(R.string.trash_error, trash.error.orEmpty()),
                     color = KadrCoral,
                     modifier = Modifier.align(Alignment.Center).padding(32.dp),
                 )
@@ -97,10 +100,12 @@ fun TrashScreen(
                     modifier = Modifier.align(Alignment.Center).padding(32.dp),
                     horizontalAlignment = Alignment.CenterHorizontally,
                 ) {
-                    Text("Trash is empty", style = MaterialTheme.typography.headlineMedium)
                     Text(
-                        "Deleted photos wait ${trash.retentionDays} days here before the server " +
-                            "lets them go.",
+                        stringResource(R.string.trash_empty),
+                        style = MaterialTheme.typography.headlineMedium,
+                    )
+                    Text(
+                        stringResource(R.string.trash_empty_detail, trash.retentionDays),
                         style = MaterialTheme.typography.bodyMedium,
                         color = KadrMuted,
                         modifier = Modifier.padding(top = 8.dp),
@@ -127,7 +132,11 @@ fun TrashScreen(
                                     overflow = TextOverflow.Ellipsis,
                                 )
                                 Text(
-                                    text = "${formatBytes(item.sizeBytes)} · ${remaining(item.purgesInMs)}",
+                                    text = stringResource(
+                                        R.string.trash_item_line,
+                                        formatBytes(item.sizeBytes),
+                                        remaining(item.purgesInMs),
+                                    ),
                                     style = MaterialTheme.typography.bodySmall,
                                     color = KadrMuted,
                                 )
@@ -136,7 +145,7 @@ fun TrashScreen(
                                 haptics.confirm()
                                 viewModel.restore(item.id)
                             }) {
-                                Text("Restore", color = KadrAmber)
+                                Text(stringResource(R.string.trash_restore), color = KadrAmber)
                             }
                         }
                     }
@@ -146,11 +155,12 @@ fun TrashScreen(
     }
 }
 
+@Composable
 private fun remaining(millis: Long): String {
-    if (millis <= 0) return "purging soon"
+    if (millis <= 0) return stringResource(R.string.trash_purging_soon)
     val days = TimeUnit.MILLISECONDS.toDays(millis)
-    if (days >= 1) return "$days day${if (days == 1L) "" else "s"} left"
+    if (days >= 1) return pluralStringResource(R.plurals.trash_days_left, days.toInt(), days)
     val hours = TimeUnit.MILLISECONDS.toHours(millis)
-    if (hours >= 1) return "$hours hour${if (hours == 1L) "" else "s"} left"
-    return "less than an hour left"
+    if (hours >= 1) return pluralStringResource(R.plurals.trash_hours_left, hours.toInt(), hours)
+    return stringResource(R.string.trash_less_than_hour)
 }

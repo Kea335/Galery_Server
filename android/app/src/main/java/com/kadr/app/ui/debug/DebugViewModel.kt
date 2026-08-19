@@ -7,6 +7,7 @@ import com.kadr.app.data.local.LocalAsset
 import com.kadr.app.data.local.StateCount
 import com.kadr.app.data.prefs.KadrSettings
 import com.kadr.app.data.prefs.SettingsStore
+import com.kadr.app.data.repo.AlbumRepository
 import com.kadr.app.data.repo.BackupProgress
 import com.kadr.app.data.repo.BackupRepository
 import com.kadr.app.data.repo.LibraryRepository
@@ -19,6 +20,9 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import javax.inject.Inject
+import dagger.hilt.android.qualifiers.ApplicationContext
+import com.kadr.app.R
+import android.content.Context
 
 data class StorageSummary(
     val reclaimableBytes: Long,
@@ -31,8 +35,10 @@ data class StorageSummary(
 class DebugViewModel @Inject constructor(
     private val repository: BackupRepository,
     private val library: LibraryRepository,
+    private val albums: AlbumRepository,
     private val settingsStore: SettingsStore,
     private val scheduler: BackupScheduler,
+    @param:ApplicationContext private val context: Context,
 ) : ViewModel() {
 
     val assets: StateFlow<List<LocalAsset>> = repository.observeAssets()
@@ -87,33 +93,42 @@ class DebugViewModel @Inject constructor(
     fun scan() = guarded {
         repository.scan()
             .onSuccess { result ->
-                _message.value =
-                    "Scanned ${result.total}: ${result.added} new, ${result.changed} changed, ${result.unchanged} unchanged."
+                _message.value = context.getString(
+                    R.string.backup_msg_scanned,
+                    result.total,
+                    result.added,
+                    result.changed,
+                    result.unchanged,
+                )
             }
-            .onFailure { _message.value = "Scan failed: ${it.readable()}" }
+            .onFailure { _message.value = context.getString(R.string.backup_msg_scan_failed, it.readable()) }
     }
 
     /** Hands the batch to WorkManager so it survives the app being closed. */
     fun backupNow() {
         scheduler.backupNow()
-        _message.value = "Backup queued."
+        _message.value = context.getString(R.string.backup_msg_queued)
     }
 
     fun stopBackup() {
         scheduler.stop()
-        _message.value = "Stopping after the current file."
+        _message.value = context.getString(R.string.backup_msg_stopping)
     }
 
     fun retryFailed() = guarded {
         val reset = repository.retryFailed()
-        _message.value = if (reset > 0) "$reset failures queued again." else "Nothing failed."
+        _message.value = if (reset > 0) {
+            context.getString(R.string.backup_msg_retry_queued, reset)
+        } else {
+            context.getString(R.string.backup_msg_nothing_failed)
+        }
         if (reset > 0) scheduler.backupNow()
     }
 
     fun upload(assetId: Long) = guarded {
         repository.upload(assetId)
-            .onSuccess { _message.value = "Uploaded. Server asset id $it" }
-            .onFailure { _message.value = "Upload failed: ${it.readable()}" }
+            .onSuccess { _message.value = context.getString(R.string.backup_msg_uploaded, it) }
+            .onFailure { _message.value = context.getString(R.string.backup_msg_upload_failed, it.readable()) }
     }
 
     fun setAutoBackup(enabled: Boolean) {
@@ -133,11 +148,25 @@ class DebugViewModel @Inject constructor(
 
     fun setIncludeVideos(enabled: Boolean) {
         settingsStore.setIncludeVideos(enabled)
+        // Turning the rule back on has to bring what it parked back with it.
+        if (enabled) viewModelScope.launch { repository.requeueSkipped() }
     }
 
+    /**
+     * The same unpairing [com.kadr.app.ui.settings.SettingsViewModel.unpair]
+     * performs: the mirror of the old server goes too, or its photos stay in
+     * the timeline of the next one.
+     *
+     * Order matters — the token goes before the scheduler is stopped, because
+     * the scheduler re-arms itself and only an unpaired device makes it cancel.
+     */
     fun unpair() {
-        scheduler.stop()
-        settingsStore.clearPairing()
+        viewModelScope.launch {
+            library.forgetServer()
+            albums.clearCache()
+            settingsStore.clearPairing()
+            scheduler.stop()
+        }
     }
 
     private fun guarded(block: suspend () -> Unit) {

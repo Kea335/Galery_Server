@@ -36,11 +36,14 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.pluralStringResource
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.kadr.app.R
 import androidx.paging.compose.collectAsLazyPagingItems
 import androidx.paging.compose.itemKey
 import coil3.compose.AsyncImage
@@ -93,7 +96,7 @@ fun AlbumDetailScreen(
                     Column {
                         Text(albumName)
                         Text(
-                            text = if (count == 1) "1 photo" else "$count photos",
+                            text = pluralStringResource(R.plurals.albums_photo_count, count, count),
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
@@ -101,15 +104,15 @@ fun AlbumDetailScreen(
                 },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.common_back))
                     }
                 },
                 actions = {
                     IconButton(onClick = { renaming = true }) {
-                        Icon(Icons.Default.Edit, contentDescription = "Rename album")
+                        Icon(Icons.Default.Edit, contentDescription = stringResource(R.string.album_rename))
                     }
                     IconButton(onClick = { deleting = true }) {
-                        Icon(Icons.Default.Delete, contentDescription = "Delete album")
+                        Icon(Icons.Default.Delete, contentDescription = stringResource(R.string.album_delete))
                     }
                 },
             )
@@ -153,7 +156,7 @@ fun AlbumDetailScreen(
 
     if (renaming) {
         NameDialog(
-            title = "Rename album",
+            title = stringResource(R.string.album_rename),
             initial = albumName,
             onDismiss = { renaming = false },
             onConfirm = { name ->
@@ -166,12 +169,9 @@ fun AlbumDetailScreen(
     if (deleting) {
         AlertDialog(
             onDismissRequest = { deleting = false },
-            title = { Text("Delete this album?") },
+            title = { Text(stringResource(R.string.album_delete_title)) },
             text = {
-                Text(
-                    "The album goes, on every phone signed in to this server. " +
-                        "Not one photo is deleted — they stay in the timeline.",
-                )
+                Text(stringResource(R.string.album_delete_body))
             },
             confirmButton = {
                 TextButton(
@@ -180,9 +180,13 @@ fun AlbumDetailScreen(
                         viewModel.delete(albumId)
                         onBack()
                     },
-                ) { Text("Delete") }
+                ) { Text(stringResource(R.string.album_delete_confirm)) }
             },
-            dismissButton = { TextButton(onClick = { deleting = false }) { Text("Cancel") } },
+            dismissButton = {
+                TextButton(onClick = { deleting = false }) {
+                    Text(stringResource(R.string.common_cancel))
+                }
+            },
         )
     }
 
@@ -190,14 +194,14 @@ fun AlbumDetailScreen(
         AlertDialog(
             onDismissRequest = { acting = null },
             title = { Text(item.filename) },
-            text = { Text("What should happen to this one?") },
+            text = { Text(stringResource(R.string.album_photo_options)) },
             confirmButton = {
                 TextButton(
                     onClick = {
                         acting = null
                         viewModel.setCover(albumId, item)
                     },
-                ) { Text("Make it the cover") }
+                ) { Text(stringResource(R.string.album_make_cover)) }
             },
             dismissButton = {
                 TextButton(
@@ -205,7 +209,7 @@ fun AlbumDetailScreen(
                         removing = item
                         acting = null
                     },
-                ) { Text("Take out of album") }
+                ) { Text(stringResource(R.string.album_take_out)) }
             },
         )
     }
@@ -213,17 +217,21 @@ fun AlbumDetailScreen(
     removing?.let { item ->
         AlertDialog(
             onDismissRequest = { removing = null },
-            title = { Text("Take this out of the album?") },
-            text = { Text("It stays in the timeline and on the server. Only the album changes.") },
+            title = { Text(stringResource(R.string.album_take_out_title)) },
+            text = { Text(stringResource(R.string.album_take_out_body)) },
             confirmButton = {
                 TextButton(
                     onClick = {
                         removing = null
                         viewModel.removeFromAlbum(albumId, item)
                     },
-                ) { Text("Take out") }
+                ) { Text(stringResource(R.string.album_take_out_confirm)) }
             },
-            dismissButton = { TextButton(onClick = { removing = null }) { Text("Cancel") } },
+            dismissButton = {
+                TextButton(onClick = { removing = null }) {
+                    Text(stringResource(R.string.common_cancel))
+                }
+            },
         )
     }
 }
@@ -233,7 +241,7 @@ fun AlbumDetailScreen(
 internal fun AlbumEmptyHint(modifier: Modifier = Modifier) {
     Box(contentAlignment = Alignment.Center, modifier = modifier) {
         Text(
-            text = "Nothing in here yet. Pick photos in the timeline and add them.",
+            text = stringResource(R.string.album_empty),
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )

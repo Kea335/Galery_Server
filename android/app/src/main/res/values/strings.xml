@@ -2,6 +2,7 @@
 <resources>
     <string name="app_name">Kadr</string>
 
+    <!-- Notifications (§14) -->
     <string name="backup_channel_name">Backup progress</string>
     <string name="backup_channel_description">Shows what Kadr is uploading while a batch runs.</string>
     <string name="backup_starting">Preparing backup</string>
@@ -11,4 +12,228 @@
     <string name="backup_uploading_count">Backing up %1$d of %2$d</string>
     <string name="backup_action_stop">Stop</string>
     <string name="backup_done_title">Backup finished</string>
+
+    <!-- Shared -->
+    <string name="common_back">Back</string>
+    <string name="common_cancel">Cancel</string>
+    <string name="common_save">Save</string>
+    <string name="common_name">Name</string>
+    <string name="common_continue">Continue</string>
+    <string name="common_unknown_error">unknown error</string>
+    <string name="common_nothing_removed">Nothing was removed.</string>
+    <plurals name="common_freed_files">
+        <item quantity="one">Freed %1$d file.</item>
+        <item quantity="other">Freed %1$d files.</item>
+    </plurals>
+
+    <!-- Sign in (§16) -->
+    <string name="login_subtitle">Point the app at your server and sign in. Every phone that signs in sees the same library.</string>
+    <string name="login_server_address">Server address</string>
+    <string name="login_test_connection">Test connection</string>
+    <string name="login_reached">Reached Kadr %1$s</string>
+    <string name="login_health_summary">%1$d assets · %2$s free</string>
+    <string name="login_thumbnails_unavailable">Thumbnails unavailable — ffmpeg is not installed on the server.</string>
+    <string name="login_username">Username</string>
+    <string name="login_password">Password</string>
+    <string name="login_show_password">Show password</string>
+    <string name="login_hide_password">Hide password</string>
+    <string name="login_sign_in">Sign in</string>
+    <string name="login_no_account">No account yet? On the server: node src/cli.js user add &lt;name&gt;</string>
+    <string name="login_cleartext_note">Debug builds allow plain HTTP so you can sign in before installing the server\'s certificate. Release builds require TLS.</string>
+    <string name="login_enter_address_first">Enter the server address first.</string>
+
+    <!-- Timeline (§12) -->
+    <plurals name="timeline_photo_count">
+        <item quantity="one">%1$d photo</item>
+        <item quantity="other">%1$d photos</item>
+    </plurals>
+    <string name="timeline_albums">Albums</string>
+    <string name="timeline_backup_status">Backup status</string>
+    <string name="timeline_stop_selecting">Stop selecting</string>
+    <string name="timeline_selected_count">%1$d selected</string>
+    <string name="timeline_add_to_album">Add to an album</string>
+    <string name="timeline_free_up">Free up space on this phone</string>
+    <string name="timeline_server_full">The server is out of space</string>
+    <string name="timeline_server_full_detail">%1$s left — free some up or add a disk</string>
+    <string name="timeline_server_full_detail_unknown">Free some up or add a disk</string>
+    <string name="timeline_not_backed_up">Not backed up yet</string>
+    <string name="timeline_selected">Selected</string>
+    <string name="timeline_not_selected">Not selected</string>
+    <string name="timeline_reading_library">Reading the library…</string>
+    <string name="timeline_empty_title">Nothing here yet</string>
+    <string name="timeline_empty_subtitle">Grant access and run a backup — photos show up as soon as they are indexed.</string>
+    <string name="timeline_remove_title">Remove %1$d from this phone?</string>
+    <string name="timeline_remove_body">%1$s will be freed. The server keeps its copy — these stay in the timeline.</string>
+    <string name="timeline_remove_withheld">\n\n%1$d were left alone: the server could not confirm it still has them.</string>
+    <string name="timeline_remove_confirm">Remove</string>
+    <plurals name="timeline_add_to_title">
+        <item quantity="one">Add %1$d photo to…</item>
+        <item quantity="other">Add %1$d photos to…</item>
+    </plurals>
+    <string name="timeline_no_albums">No albums yet. Make one from the albums screen first.</string>
+    <string name="timeline_album_row">%1$s  ·  %2$d</string>
+    <string name="timeline_msg_sync_failed">Sync failed: %1$s</string>
+    <string name="timeline_msg_backup_queued">Backup queued.</string>
+    <string name="timeline_msg_nothing_backed_up">Nothing here is backed up yet, so nothing can be freed.</string>
+    <string name="timeline_msg_no_vouch">The server could not vouch for any of these yet.</string>
+    <string name="timeline_msg_check_failed">Could not check with the server: %1$s</string>
+
+    <!-- Viewer -->
+    <string name="viewer_video">Video</string>
+    <string name="viewer_video_missing">This video is not on the phone or the server yet</string>
+
+    <!-- Video player -->
+    <string name="video_seek_forward">+10s</string>
+    <string name="video_seek_back">−10s</string>
+    <string name="video_brightness">Brightness</string>
+    <string name="video_volume">Volume</string>
+    <string name="video_play">Play</string>
+    <string name="video_pause">Pause</string>
+    <string name="video_step_frame">Step one frame</string>
+    <string name="video_playback_speed">Playback speed</string>
+    <string name="video_mute">Mute</string>
+    <string name="video_unmute">Unmute</string>
+
+    <!-- Albums -->
+    <string name="albums_title">Albums</string>
+    <string name="albums_new">New album</string>
+    <string name="albums_empty">No albums yet. Make one, then pick photos in the timeline and add them — every phone signed in to this server will see it.</string>
+    <plurals name="albums_photo_count">
+        <item quantity="one">%1$d photo</item>
+        <item quantity="other">%1$d photos</item>
+    </plurals>
+    <string name="album_rename">Rename album</string>
+    <string name="album_delete">Delete album</string>
+    <string name="album_delete_title">Delete this album?</string>
+    <string name="album_delete_body">The album goes, on every phone signed in to this server. Not one photo is deleted — they stay in the timeline.</string>
+    <string name="album_delete_confirm">Delete</string>
+    <string name="album_photo_options">What should happen to this one?</string>
+    <string name="album_make_cover">Make it the cover</string>
+    <string name="album_take_out">Take out of album</string>
+    <string name="album_take_out_title">Take this out of the album?</string>
+    <string name="album_take_out_body">It stays in the timeline and on the server. Only the album changes.</string>
+    <string name="album_take_out_confirm">Take out</string>
+    <string name="album_empty">Nothing in here yet. Pick photos in the timeline and add them.</string>
+    <string name="albums_msg_read_failed">Could not read albums: %1$s</string>
+    <string name="albums_msg_created">Album created.</string>
+    <string name="albums_msg_create_failed">Could not create it: %1$s</string>
+    <string name="albums_msg_rename_failed">Could not rename it: %1$s</string>
+    <string name="albums_msg_deleted">Album deleted. The photos are untouched.</string>
+    <string name="albums_msg_delete_failed">Could not delete it: %1$s</string>
+    <string name="albums_msg_none_added">Nothing was added — these are still waiting to be backed up.</string>
+    <string name="albums_msg_added_partial">%1$d added. %2$d are still waiting to be backed up, so they could not go in yet.</string>
+    <string name="albums_msg_added">%1$d added.</string>
+    <string name="albums_msg_add_failed">Could not add them: %1$s</string>
+    <string name="albums_msg_cover_not_on_server">That photo is not on the server yet, so it cannot be the cover.</string>
+    <string name="albums_msg_cover_set">Cover set.</string>
+    <string name="albums_msg_cover_failed">Could not set the cover: %1$s</string>
+    <string name="albums_msg_not_on_server">That photo is not on the server, so it is not in the album.</string>
+    <string name="albums_msg_take_out_failed">Could not take it out: %1$s</string>
+
+    <!-- Trash -->
+    <string name="trash_title">Trash</string>
+    <string name="trash_error">Could not reach the server: %1$s</string>
+    <string name="trash_empty">Trash is empty</string>
+    <string name="trash_empty_detail">Deleted photos wait %1$d days here before the server lets them go.</string>
+    <string name="trash_item_line">%1$s · %2$s</string>
+    <string name="trash_restore">Restore</string>
+    <string name="trash_purging_soon">purging soon</string>
+    <plurals name="trash_days_left">
+        <item quantity="one">%1$d day left</item>
+        <item quantity="other">%1$d days left</item>
+    </plurals>
+    <plurals name="trash_hours_left">
+        <item quantity="one">%1$d hour left</item>
+        <item quantity="other">%1$d hours left</item>
+    </plurals>
+    <string name="trash_less_than_hour">less than an hour left</string>
+
+    <!-- Settings -->
+    <string name="settings_title">Settings</string>
+    <string name="settings_section_server">Server</string>
+    <string name="settings_not_paired">not paired</string>
+    <string name="settings_server_summary">Kadr %1$s · %2$d assets · %3$s free</string>
+    <string name="settings_unpair">Unpair this device</string>
+    <string name="settings_section_when">When to back up</string>
+    <string name="settings_auto_title">Automatic backup</string>
+    <string name="settings_auto_subtitle">Runs every few hours in the background</string>
+    <string name="settings_wifi_title">Wi-Fi only</string>
+    <string name="settings_wifi_subtitle">Never spend mobile data</string>
+    <string name="settings_charging_title">Only while charging</string>
+    <string name="settings_videos_title">Include videos</string>
+    <string name="settings_section_skipped">Skipped folders</string>
+    <string name="settings_section_appearance">Appearance</string>
+    <string name="settings_dynamic_title">Use system colours</string>
+    <string name="settings_dynamic_subtitle">Material You instead of Kadr\'s own palette</string>
+    <string name="settings_section_storage">Storage</string>
+    <string name="settings_cache_title">Media cache</string>
+    <string name="settings_cache_subtitle">%1$s used of %2$d MB</string>
+    <string name="settings_clear">Clear</string>
+    <string name="settings_trash_title">Trash</string>
+    <string name="settings_trash_subtitle">Deleted photos are kept for a while before they go</string>
+    <string name="settings_free_title">Free up space</string>
+    <string name="settings_free_subtitle">Remove local copies the server has confirmed</string>
+    <string name="settings_checking">Checking…</string>
+    <string name="settings_footer">Kadr never deletes anything on its own. Freeing space asks the server to confirm every file first, and then Android asks you.</string>
+    <string name="settings_free_dialog_title">Free up %1$s?</string>
+    <string name="settings_free_dialog_body">%1$d files will be removed from this phone. The server has just confirmed it holds every one of them.</string>
+    <string name="settings_free_dialog_withheld">%1$d file(s) were left alone — the server could not vouch for them.</string>
+    <string name="settings_msg_cache_cleared">Media cache cleared.</string>
+    <string name="settings_msg_restored">Restored.</string>
+    <string name="settings_msg_restore_failed">Restore failed: %1$s</string>
+    <string name="settings_msg_nothing_safe">Nothing is safe to remove yet.</string>
+    <string name="settings_msg_check_failed">Could not check with the server: %1$s</string>
+
+    <!-- Backup status screen -->
+    <string name="backup_title">Backup status</string>
+    <string name="backup_settings">Settings</string>
+    <string name="backup_unpair">Unpair</string>
+    <string name="backup_stop">Stop</string>
+    <string name="backup_now">Back up now</string>
+    <string name="backup_scan">Scan</string>
+    <string name="backup_scan_busy">Scanning…</string>
+    <string name="backup_toggle_auto">Auto</string>
+    <string name="backup_toggle_wifi">Wi-Fi only</string>
+    <string name="backup_toggle_charging">Charging</string>
+    <string name="backup_toggle_videos">Videos</string>
+    <string name="backup_storage">Storage</string>
+    <string name="backup_storage_reclaimable">%1$s on this phone could be freed</string>
+    <string name="backup_storage_freed">%1$s already freed</string>
+    <string name="backup_storage_server">Server: %1$d assets · %2$s free</string>
+    <string name="backup_nothing_indexed">Nothing indexed yet. Run a scan.</string>
+    <string name="backup_permission_title">Kadr needs to read your photos and videos</string>
+    <string name="backup_permission_body">Nothing leaves the device until a backup runs.</string>
+    <string name="backup_grant">Grant access</string>
+    <string name="backup_no_server">no server configured</string>
+    <string name="backup_counts">%1$d indexed · %2$d verified</string>
+    <string name="backup_counts_failed"> · %1$d failed</string>
+    <string name="backup_counts_skipped"> · %1$d skipped</string>
+    <string name="backup_reading_mediastore">Reading MediaStore… %1$d files</string>
+    <string name="backup_phase_idle">Idle</string>
+    <string name="backup_phase_scanning">Scanning MediaStore</string>
+    <string name="backup_phase_hashing">Fingerprinting files</string>
+    <string name="backup_phase_checking">Asking the server what it needs</string>
+    <string name="backup_phase_uploading">Backing up %1$d of %2$d</string>
+    <string name="backup_failed_count">%1$d failed</string>
+    <string name="backup_retry_all">Retry all</string>
+    <string name="backup_failure_line">%1$s — %2$s (attempt %3$d)</string>
+    <string name="backup_send">Send</string>
+    <string name="backup_msg_scanned">Scanned %1$d: %2$d new, %3$d changed, %4$d unchanged.</string>
+    <string name="backup_msg_scan_failed">Scan failed: %1$s</string>
+    <string name="backup_msg_queued">Backup queued.</string>
+    <string name="backup_msg_stopping">Stopping after the current file.</string>
+    <string name="backup_msg_retry_queued">%1$d failures queued again.</string>
+    <string name="backup_msg_nothing_failed">Nothing failed.</string>
+    <string name="backup_msg_uploaded">Uploaded. Server asset id %1$s</string>
+    <string name="backup_msg_upload_failed">Upload failed: %1$s</string>
+
+    <!-- AssetState chips -->
+    <string name="state_discovered">discovered</string>
+    <string name="state_hashed">hashed</string>
+    <string name="state_checked">checked</string>
+    <string name="state_uploading">uploading</string>
+    <string name="state_verified">verified</string>
+    <string name="state_local_freed">freed locally</string>
+    <string name="state_skipped">skipped</string>
+    <string name="state_failed">failed</string>
 </resources>

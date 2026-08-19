@@ -48,6 +48,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
@@ -58,6 +59,7 @@ import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.kadr.app.R
 import coil3.compose.AsyncImage
 import com.kadr.app.data.local.AssetState
 import com.kadr.app.data.local.LocalAsset
@@ -70,10 +72,17 @@ import com.kadr.app.ui.theme.KadrCoral
 import com.kadr.app.ui.theme.KadrMuted
 import java.util.Locale
 
+/** API 34's "Select photos…", which grants this instead of the two below. */
+private const val READ_MEDIA_VISUAL_USER_SELECTED =
+    "android.permission.READ_MEDIA_VISUAL_USER_SELECTED"
+
 private val mediaPermissions: Array<String> = buildList {
     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
         add(Manifest.permission.READ_MEDIA_IMAGES)
         add(Manifest.permission.READ_MEDIA_VIDEO)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+            add(READ_MEDIA_VISUAL_USER_SELECTED)
+        }
         // The batch notification is what keeps a long upload alive (§10.6).
         add(Manifest.permission.POST_NOTIFICATIONS)
     } else {
@@ -82,8 +91,30 @@ private val mediaPermissions: Array<String> = buildList {
     }
 }.toTypedArray()
 
-private val requiredPermissions = mediaPermissions.filterNot {
-    it == Manifest.permission.POST_NOTIFICATIONS
+/**
+ * Whether MediaStore will hand this app anything at all.
+ *
+ * From API 34 the answer is not a single yes or no: "Select photos…" grants
+ * READ_MEDIA_VISUAL_USER_SELECTED and *withholds* the two full-library
+ * permissions, so insisting on those would report no access while the scanner
+ * happily reads the photos the user picked — and the prompt would come back on
+ * every visit. Partial access is access; the scan simply finds less.
+ */
+private fun hasMediaAccess(context: android.content.Context): Boolean {
+    fun granted(permission: String) =
+        ContextCompat.checkSelfPermission(context, permission) == PackageManager.PERMISSION_GRANTED
+
+    if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) {
+        @Suppress("DEPRECATION")
+        return granted(Manifest.permission.READ_EXTERNAL_STORAGE)
+    }
+
+    val full = granted(Manifest.permission.READ_MEDIA_IMAGES) &&
+        granted(Manifest.permission.READ_MEDIA_VIDEO)
+    if (full) return true
+
+    return Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE &&
+        granted(READ_MEDIA_VISUAL_USER_SELECTED)
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -107,19 +138,15 @@ fun DebugScreen(
     val failures by viewModel.failures.collectAsStateWithLifecycle()
     val storage by viewModel.storage.collectAsStateWithLifecycle()
 
-    var hasPermission by remember {
-        mutableStateOf(
-            requiredPermissions.all { permission ->
-                ContextCompat.checkSelfPermission(context, permission) ==
-                    PackageManager.PERMISSION_GRANTED
-            },
-        )
-    }
+    var hasPermission by remember { mutableStateOf(hasMediaAccess(context)) }
 
     val permissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions(),
-    ) { granted ->
-        hasPermission = requiredPermissions.all { granted[it] == true }
+    ) {
+        // Asked of the system rather than read off the result map: on API 34 a
+        // partial grant comes back with the full-library permissions marked
+        // false, and only checkSelfPermission tells the whole story.
+        hasPermission = hasMediaAccess(context)
     }
 
     val snackbarHostState = remember { SnackbarHostState() }
@@ -139,13 +166,13 @@ fun DebugScreen(
         topBar = {
             Column {
                 TopAppBar(
-                    title = { Text("Backup status") },
+                    title = { Text(stringResource(R.string.backup_title)) },
                     navigationIcon = {
                         onBack?.let {
                             IconButton(onClick = it) {
                                 Icon(
                                     imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                                    contentDescription = "Back",
+                                    contentDescription = stringResource(R.string.common_back),
                                 )
                             }
                         }
@@ -155,13 +182,13 @@ fun DebugScreen(
                             IconButton(onClick = it) {
                                 Icon(
                                     imageVector = Icons.Default.Settings,
-                                    contentDescription = "Settings",
+                                    contentDescription = stringResource(R.string.backup_settings),
                                 )
                             }
                         } ?: TextButton(onClick = {
                             viewModel.unpair()
                             onUnpaired()
-                        }) { Text("Unpair") }
+                        }) { Text(stringResource(R.string.backup_unpair)) }
                     },
                 )
                 // Backup as ambient feedback: a 2 dp hairline, never a dialog (§12).
@@ -217,20 +244,28 @@ fun DebugScreen(
                             OutlinedButton(
                                 onClick = viewModel::stopBackup,
                                 modifier = Modifier.weight(1f),
-                            ) { Text("Stop") }
+                            ) { Text(stringResource(R.string.backup_stop)) }
                         } else {
                             Button(
                                 onClick = viewModel::backupNow,
                                 enabled = !busy,
                                 modifier = Modifier.weight(1f),
-                            ) { Text("Back up now") }
+                            ) { Text(stringResource(R.string.backup_now)) }
                         }
 
                         OutlinedButton(
                             onClick = viewModel::scan,
                             enabled = !busy && !scanning,
                             modifier = Modifier.weight(1f),
-                        ) { Text(if (scanning) "Scanning…" else "Scan") }
+                        ) {
+                            Text(
+                                if (scanning) {
+                                    stringResource(R.string.backup_scan_busy)
+                                } else {
+                                    stringResource(R.string.backup_scan)
+                                },
+                            )
+                        }
                     }
                 }
 
@@ -239,10 +274,26 @@ fun DebugScreen(
                         modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                     ) {
-                        Toggle("Auto", settings.autoBackup, viewModel::setAutoBackup)
-                        Toggle("Wi-Fi only", settings.wifiOnly, viewModel::setWifiOnly)
-                        Toggle("Charging", settings.chargingOnly, viewModel::setChargingOnly)
-                        Toggle("Videos", settings.includeVideos, viewModel::setIncludeVideos)
+                        Toggle(
+                            stringResource(R.string.backup_toggle_auto),
+                            settings.autoBackup,
+                            viewModel::setAutoBackup,
+                        )
+                        Toggle(
+                            stringResource(R.string.backup_toggle_wifi),
+                            settings.wifiOnly,
+                            viewModel::setWifiOnly,
+                        )
+                        Toggle(
+                            stringResource(R.string.backup_toggle_charging),
+                            settings.chargingOnly,
+                            viewModel::setChargingOnly,
+                        )
+                        Toggle(
+                            stringResource(R.string.backup_toggle_videos),
+                            settings.includeVideos,
+                            viewModel::setIncludeVideos,
+                        )
                     }
                 }
 
@@ -258,23 +309,34 @@ fun DebugScreen(
                                 modifier = Modifier.padding(16.dp),
                                 verticalArrangement = Arrangement.spacedBy(4.dp),
                             ) {
-                                Text("Storage", style = MaterialTheme.typography.titleSmall)
                                 Text(
-                                    "${formatBytes(summary.reclaimableBytes)} on this phone could be freed",
+                                    stringResource(R.string.backup_storage),
+                                    style = MaterialTheme.typography.titleSmall,
+                                )
+                                Text(
+                                    stringResource(
+                                        R.string.backup_storage_reclaimable,
+                                        formatBytes(summary.reclaimableBytes),
+                                    ),
                                     style = MaterialTheme.typography.bodySmall,
                                     color = KadrMuted,
                                 )
                                 if (summary.alreadyFreedBytes > 0) {
                                     Text(
-                                        "${formatBytes(summary.alreadyFreedBytes)} already freed",
+                                        stringResource(
+                                            R.string.backup_storage_freed,
+                                            formatBytes(summary.alreadyFreedBytes),
+                                        ),
                                         style = MaterialTheme.typography.bodySmall,
                                         color = KadrMuted,
                                     )
                                 }
                                 Text(
-                                    "Server: ${summary.serverAssets} assets · " +
-                                        (summary.serverFreeBytes?.let { formatBytes(it) } ?: "?") +
-                                        " free",
+                                    stringResource(
+                                        R.string.backup_storage_server,
+                                        summary.serverAssets,
+                                        summary.serverFreeBytes?.let { formatBytes(it) } ?: "?",
+                                    ),
                                     style = MaterialTheme.typography.bodySmall,
                                     color = KadrMuted,
                                 )
@@ -302,7 +364,7 @@ fun DebugScreen(
                             contentAlignment = Alignment.Center,
                         ) {
                             Text(
-                                "Nothing indexed yet. Run a scan.",
+                                stringResource(R.string.backup_nothing_indexed),
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
                         }
@@ -342,16 +404,16 @@ private fun PermissionPrompt(onGrant: () -> Unit) {
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         Text(
-            "Kadr needs to read your photos and videos",
+            stringResource(R.string.backup_permission_title),
             style = MaterialTheme.typography.titleMedium,
         )
         Text(
-            "Nothing leaves the device until a backup runs.",
+            stringResource(R.string.backup_permission_body),
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.padding(top = 8.dp, bottom = 24.dp),
         )
-        Button(onClick = onGrant) { Text("Grant access") }
+        Button(onClick = onGrant) { Text(stringResource(R.string.backup_grant)) }
     }
 }
 
@@ -373,15 +435,18 @@ private fun StatusCard(
     ) {
         Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
             Text(
-                text = serverUrl.ifBlank { "no server configured" },
+                text = serverUrl.ifBlank { stringResource(R.string.backup_no_server) },
                 style = MaterialTheme.typography.bodyMedium,
                 fontFamily = FontFamily.Monospace,
             )
+            val counts = stringResource(R.string.backup_counts, total, verified)
+            val failedLabel = stringResource(R.string.backup_counts_failed, failed)
+            val skippedLabel = stringResource(R.string.backup_counts_skipped, skipped)
             Text(
                 text = buildString {
-                    append("$total indexed · $verified verified")
-                    if (failed > 0) append(" · $failed failed")
-                    if (skipped > 0) append(" · $skipped skipped")
+                    append(counts)
+                    if (failed > 0) append(failedLabel)
+                    if (skipped > 0) append(skippedLabel)
                 },
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -389,7 +454,7 @@ private fun StatusCard(
 
             if (scanning) {
                 Text(
-                    "Reading MediaStore… $scanProgress files",
+                    stringResource(R.string.backup_reading_mediastore, scanProgress),
                     style = MaterialTheme.typography.bodySmall,
                     color = KadrAmber,
                 )
@@ -413,14 +478,20 @@ private fun StatusCard(
     }
 }
 
+@Composable
 private fun phaseLabel(progress: BackupProgress): String = when (progress.phase) {
-    BackupPhase.IDLE -> "Idle"
-    BackupPhase.SCANNING -> "Scanning MediaStore"
-    BackupPhase.HASHING -> "Fingerprinting files"
-    BackupPhase.CHECKING -> "Asking the server what it needs"
-    BackupPhase.UPLOADING -> buildString {
-        append("Backing up ${(progress.done + 1).coerceAtMost(maxOf(progress.total, 1))}")
-        append(" of ${maxOf(progress.total, 1)}")
+    BackupPhase.IDLE -> stringResource(R.string.backup_phase_idle)
+    BackupPhase.SCANNING -> stringResource(R.string.backup_phase_scanning)
+    BackupPhase.HASHING -> stringResource(R.string.backup_phase_hashing)
+    BackupPhase.CHECKING -> stringResource(R.string.backup_phase_checking)
+    BackupPhase.UPLOADING -> {
+        val head = stringResource(
+            R.string.backup_phase_uploading,
+            (progress.done + 1).coerceAtMost(maxOf(progress.total, 1)),
+            maxOf(progress.total, 1),
+        )
+        buildString {
+        append(head)
         progress.filename?.let { append(" · $it") }
         if (progress.bytesPerSecond > 0) {
             val mb = progress.bytesPerSecond / (1024.0 * 1024.0)
@@ -429,6 +500,7 @@ private fun phaseLabel(progress: BackupProgress): String = when (progress.phase)
                 if (mb >= 1.0) String.format(Locale.US, "%.1f MB/s", mb)
                 else String.format(Locale.US, "%.0f KB/s", progress.bytesPerSecond / 1024.0),
             )
+        }
         }
     }
 }
@@ -448,16 +520,23 @@ private fun FailureCard(failures: List<LocalAsset>, onRetryAll: () -> Unit, enab
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Text(
-                    "${failures.size} failed",
+                    stringResource(R.string.backup_failed_count, failures.size),
                     style = MaterialTheme.typography.titleSmall,
                     color = KadrCoral,
                 )
-                TextButton(onClick = onRetryAll, enabled = enabled) { Text("Retry all") }
+                TextButton(onClick = onRetryAll, enabled = enabled) {
+                    Text(stringResource(R.string.backup_retry_all))
+                }
             }
             // Never silent (§10.4): the actual error is on screen.
             failures.take(3).forEach { asset ->
                 Text(
-                    "${asset.filename} — ${asset.lastError ?: "unknown error"} (attempt ${asset.attemptCount})",
+                    stringResource(
+                        R.string.backup_failure_line,
+                        asset.filename,
+                        asset.lastError ?: stringResource(R.string.common_unknown_error),
+                        asset.attemptCount,
+                    ),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     maxLines = 2,
@@ -516,7 +595,7 @@ private fun AssetRow(asset: LocalAsset, onUpload: () -> Unit, modifier: Modifier
         StateChip(asset.state)
 
         if (asset.state != AssetState.VERIFIED) {
-            TextButton(onClick = onUpload) { Text("Send") }
+            TextButton(onClick = onUpload) { Text(stringResource(R.string.backup_send)) }
         }
     }
 }
@@ -530,7 +609,18 @@ private fun StateChip(state: AssetState) {
         else -> KadrMuted
     }
     Text(
-        text = state.name.lowercase(),
+        text = stringResource(
+            when (state) {
+                AssetState.DISCOVERED -> R.string.state_discovered
+                AssetState.HASHED -> R.string.state_hashed
+                AssetState.CHECKED -> R.string.state_checked
+                AssetState.UPLOADING -> R.string.state_uploading
+                AssetState.VERIFIED -> R.string.state_verified
+                AssetState.LOCAL_FREED -> R.string.state_local_freed
+                AssetState.SKIPPED -> R.string.state_skipped
+                AssetState.FAILED -> R.string.state_failed
+            },
+        ),
         style = MaterialTheme.typography.labelSmall,
         color = color,
         fontWeight = FontWeight.Medium,

@@ -1,0 +1,237 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Bildirimler (§14) -->
+    <string name="backup_channel_name">Yedekleme ilerlemesi</string>
+    <string name="backup_channel_description">Bir yedekleme sürerken Kadr\'ın ne yüklediğini gösterir.</string>
+    <string name="backup_starting">Yedekleme hazırlanıyor</string>
+    <string name="backup_scanning">Yeni fotoğraflar aranıyor</string>
+    <string name="backup_hashing">Dosya parmak izleri çıkarılıyor</string>
+    <string name="backup_checking">Sunucuya neye ihtiyacı olduğu soruluyor</string>
+    <string name="backup_uploading_count">Yedekleniyor: %1$d / %2$d</string>
+    <string name="backup_action_stop">Durdur</string>
+    <string name="backup_done_title">Yedekleme bitti</string>
+
+    <!-- Ortak -->
+    <string name="common_back">Geri</string>
+    <string name="common_cancel">Vazgeç</string>
+    <string name="common_save">Kaydet</string>
+    <string name="common_name">Ad</string>
+    <string name="common_continue">Devam et</string>
+    <string name="common_unknown_error">bilinmeyen hata</string>
+    <string name="common_nothing_removed">Hiçbir şey kaldırılmadı.</string>
+    <plurals name="common_freed_files">
+        <item quantity="one">%1$d dosya boşaltıldı.</item>
+        <item quantity="other">%1$d dosya boşaltıldı.</item>
+    </plurals>
+
+    <!-- Oturum açma (§16) -->
+    <string name="login_subtitle">Uygulamayı sunucunuza yönlendirip oturum açın. Oturum açan her telefon aynı kitaplığı görür.</string>
+    <string name="login_server_address">Sunucu adresi</string>
+    <string name="login_test_connection">Bağlantıyı sına</string>
+    <string name="login_reached">Kadr %1$s bulundu</string>
+    <string name="login_health_summary">%1$d öğe · %2$s boş</string>
+    <string name="login_thumbnails_unavailable">Küçük resimler kullanılamıyor — sunucuda ffmpeg kurulu değil.</string>
+    <string name="login_username">Kullanıcı adı</string>
+    <string name="login_password">Parola</string>
+    <string name="login_show_password">Parolayı göster</string>
+    <string name="login_hide_password">Parolayı gizle</string>
+    <string name="login_sign_in">Oturum aç</string>
+    <string name="login_no_account">Hesabınız yok mu? Sunucuda: node src/cli.js user add &lt;ad&gt;</string>
+    <string name="login_cleartext_note">Hata ayıklama sürümleri düz HTTP\'ye izin verir; böylece sunucunun sertifikasını kurmadan oturum açabilirsiniz. Yayın sürümleri TLS ister.</string>
+    <string name="login_enter_address_first">Önce sunucu adresini girin.</string>
+
+    <!-- Zaman akışı (§12) -->
+    <plurals name="timeline_photo_count">
+        <item quantity="one">%1$d fotoğraf</item>
+        <item quantity="other">%1$d fotoğraf</item>
+    </plurals>
+    <string name="timeline_albums">Albümler</string>
+    <string name="timeline_backup_status">Yedekleme durumu</string>
+    <string name="timeline_stop_selecting">Seçimi bitir</string>
+    <string name="timeline_selected_count">%1$d seçildi</string>
+    <string name="timeline_add_to_album">Albüme ekle</string>
+    <string name="timeline_free_up">Bu telefonda yer aç</string>
+    <string name="timeline_server_full">Sunucuda yer kalmadı</string>
+    <string name="timeline_server_full_detail">%1$s kaldı — biraz yer açın ya da disk ekleyin</string>
+    <string name="timeline_server_full_detail_unknown">Biraz yer açın ya da disk ekleyin</string>
+    <string name="timeline_not_backed_up">Henüz yedeklenmedi</string>
+    <string name="timeline_selected">Seçili</string>
+    <string name="timeline_not_selected">Seçili değil</string>
+    <string name="timeline_reading_library">Kitaplık okunuyor…</string>
+    <string name="timeline_empty_title">Burada henüz bir şey yok</string>
+    <string name="timeline_empty_subtitle">İzin verin ve bir yedekleme çalıştırın — fotoğraflar dizine eklenir eklenmez görünür.</string>
+    <string name="timeline_remove_title">%1$d öğe bu telefondan kaldırılsın mı?</string>
+    <string name="timeline_remove_body">%1$s boşaltılacak. Sunucu kendi kopyasını saklar — bunlar zaman akışında kalır.</string>
+    <string name="timeline_remove_withheld">\n\n%1$d tanesine dokunulmadı: sunucu onları hâlâ tuttuğunu doğrulayamadı.</string>
+    <string name="timeline_remove_confirm">Kaldır</string>
+    <plurals name="timeline_add_to_title">
+        <item quantity="one">%1$d fotoğrafı şuraya ekle…</item>
+        <item quantity="other">%1$d fotoğrafı şuraya ekle…</item>
+    </plurals>
+    <string name="timeline_no_albums">Henüz albüm yok. Önce albümler ekranından bir tane oluşturun.</string>
+    <string name="timeline_album_row">%1$s  ·  %2$d</string>
+    <string name="timeline_msg_sync_failed">Eşitleme başarısız: %1$s</string>
+    <string name="timeline_msg_backup_queued">Yedekleme sıraya alındı.</string>
+    <string name="timeline_msg_nothing_backed_up">Buradakilerin hiçbiri henüz yedeklenmedi, bu yüzden yer açılamaz.</string>
+    <string name="timeline_msg_no_vouch">Sunucu bunların hiçbiri için henüz güvence veremedi.</string>
+    <string name="timeline_msg_check_failed">Sunucuyla doğrulanamadı: %1$s</string>
+
+    <!-- Görüntüleyici -->
+    <string name="viewer_video">Video</string>
+    <string name="viewer_video_missing">Bu video henüz ne telefonda ne de sunucuda</string>
+
+    <!-- Video oynatıcı -->
+    <string name="video_seek_forward">+10sn</string>
+    <string name="video_seek_back">−10sn</string>
+    <string name="video_brightness">Parlaklık</string>
+    <string name="video_volume">Ses</string>
+    <string name="video_play">Oynat</string>
+    <string name="video_pause">Duraklat</string>
+    <string name="video_step_frame">Bir kare ilerle</string>
+    <string name="video_playback_speed">Oynatma hızı</string>
+    <string name="video_mute">Sesi kapat</string>
+    <string name="video_unmute">Sesi aç</string>
+
+    <!-- Albümler -->
+    <string name="albums_title">Albümler</string>
+    <string name="albums_new">Yeni albüm</string>
+    <string name="albums_empty">Henüz albüm yok. Bir tane oluşturun, sonra zaman akışından fotoğraf seçip ekleyin — bu sunucuda oturum açmış her telefon onu görür.</string>
+    <plurals name="albums_photo_count">
+        <item quantity="one">%1$d fotoğraf</item>
+        <item quantity="other">%1$d fotoğraf</item>
+    </plurals>
+    <string name="album_rename">Albümü yeniden adlandır</string>
+    <string name="album_delete">Albümü sil</string>
+    <string name="album_delete_title">Bu albüm silinsin mi?</string>
+    <string name="album_delete_body">Albüm, bu sunucuda oturum açmış her telefondan kalkar. Tek bir fotoğraf bile silinmez — hepsi zaman akışında kalır.</string>
+    <string name="album_delete_confirm">Sil</string>
+    <string name="album_photo_options">Buna ne olsun?</string>
+    <string name="album_make_cover">Kapak yap</string>
+    <string name="album_take_out">Albümden çıkar</string>
+    <string name="album_take_out_title">Bu, albümden çıkarılsın mı?</string>
+    <string name="album_take_out_body">Zaman akışında ve sunucuda kalır. Yalnızca albüm değişir.</string>
+    <string name="album_take_out_confirm">Çıkar</string>
+    <string name="album_empty">Burada henüz bir şey yok. Zaman akışından fotoğraf seçip ekleyin.</string>
+    <string name="albums_msg_read_failed">Albümler okunamadı: %1$s</string>
+    <string name="albums_msg_created">Albüm oluşturuldu.</string>
+    <string name="albums_msg_create_failed">Oluşturulamadı: %1$s</string>
+    <string name="albums_msg_rename_failed">Yeniden adlandırılamadı: %1$s</string>
+    <string name="albums_msg_deleted">Albüm silindi. Fotoğraflara dokunulmadı.</string>
+    <string name="albums_msg_delete_failed">Silinemedi: %1$s</string>
+    <string name="albums_msg_none_added">Hiçbir şey eklenmedi — bunlar hâlâ yedeklenmeyi bekliyor.</string>
+    <string name="albums_msg_added_partial">%1$d eklendi. %2$d tanesi hâlâ yedeklenmeyi beklediği için henüz giremedi.</string>
+    <string name="albums_msg_added">%1$d eklendi.</string>
+    <string name="albums_msg_add_failed">Eklenemedi: %1$s</string>
+    <string name="albums_msg_cover_not_on_server">O fotoğraf henüz sunucuda değil, bu yüzden kapak olamaz.</string>
+    <string name="albums_msg_cover_set">Kapak ayarlandı.</string>
+    <string name="albums_msg_cover_failed">Kapak ayarlanamadı: %1$s</string>
+    <string name="albums_msg_not_on_server">O fotoğraf sunucuda değil, bu yüzden albümde de değil.</string>
+    <string name="albums_msg_take_out_failed">Çıkarılamadı: %1$s</string>
+
+    <!-- Çöp kutusu -->
+    <string name="trash_title">Çöp kutusu</string>
+    <string name="trash_error">Sunucuya ulaşılamadı: %1$s</string>
+    <string name="trash_empty">Çöp kutusu boş</string>
+    <string name="trash_empty_detail">Silinen fotoğraflar, sunucu onları tamamen bırakmadan önce burada %1$d gün bekler.</string>
+    <string name="trash_item_line">%1$s · %2$s</string>
+    <string name="trash_restore">Geri al</string>
+    <string name="trash_purging_soon">birazdan silinecek</string>
+    <plurals name="trash_days_left">
+        <item quantity="one">%1$d gün kaldı</item>
+        <item quantity="other">%1$d gün kaldı</item>
+    </plurals>
+    <plurals name="trash_hours_left">
+        <item quantity="one">%1$d saat kaldı</item>
+        <item quantity="other">%1$d saat kaldı</item>
+    </plurals>
+    <string name="trash_less_than_hour">bir saatten az kaldı</string>
+
+    <!-- Ayarlar -->
+    <string name="settings_title">Ayarlar</string>
+    <string name="settings_section_server">Sunucu</string>
+    <string name="settings_not_paired">eşleşmedi</string>
+    <string name="settings_server_summary">Kadr %1$s · %2$d öğe · %3$s boş</string>
+    <string name="settings_unpair">Bu cihazın eşleşmesini kaldır</string>
+    <string name="settings_section_when">Ne zaman yedeklensin</string>
+    <string name="settings_auto_title">Otomatik yedekleme</string>
+    <string name="settings_auto_subtitle">Arka planda birkaç saatte bir çalışır</string>
+    <string name="settings_wifi_title">Yalnızca Wi-Fi</string>
+    <string name="settings_wifi_subtitle">Mobil veri harcamaz</string>
+    <string name="settings_charging_title">Yalnızca şarjdayken</string>
+    <string name="settings_videos_title">Videoları da al</string>
+    <string name="settings_section_skipped">Atlanan klasörler</string>
+    <string name="settings_section_appearance">Görünüm</string>
+    <string name="settings_dynamic_title">Sistem renklerini kullan</string>
+    <string name="settings_dynamic_subtitle">Kadr\'ın kendi paleti yerine Material You</string>
+    <string name="settings_section_storage">Depolama</string>
+    <string name="settings_cache_title">Medya önbelleği</string>
+    <string name="settings_cache_subtitle">%2$d MB\'ın %1$s kadarı kullanıldı</string>
+    <string name="settings_clear">Temizle</string>
+    <string name="settings_trash_title">Çöp kutusu</string>
+    <string name="settings_trash_subtitle">Silinen fotoğraflar gitmeden önce bir süre saklanır</string>
+    <string name="settings_free_title">Yer aç</string>
+    <string name="settings_free_subtitle">Sunucunun doğruladığı yerel kopyaları kaldır</string>
+    <string name="settings_checking">Denetleniyor…</string>
+    <string name="settings_footer">Kadr kendi başına hiçbir şeyi silmez. Yer açarken önce sunucudan her dosyayı doğrulaması istenir, sonra da Android size sorar.</string>
+    <string name="settings_free_dialog_title">%1$s yer açılsın mı?</string>
+    <string name="settings_free_dialog_body">%1$d dosya bu telefondan kaldırılacak. Sunucu az önce hepsini elinde tuttuğunu doğruladı.</string>
+    <string name="settings_free_dialog_withheld">%1$d dosyaya dokunulmadı — sunucu onlar için güvence veremedi.</string>
+    <string name="settings_msg_cache_cleared">Medya önbelleği temizlendi.</string>
+    <string name="settings_msg_restored">Geri alındı.</string>
+    <string name="settings_msg_restore_failed">Geri alma başarısız: %1$s</string>
+    <string name="settings_msg_nothing_safe">Şimdilik güvenle kaldırılabilecek bir şey yok.</string>
+    <string name="settings_msg_check_failed">Sunucuyla doğrulanamadı: %1$s</string>
+
+    <!-- Yedekleme durumu ekranı -->
+    <string name="backup_title">Yedekleme durumu</string>
+    <string name="backup_settings">Ayarlar</string>
+    <string name="backup_unpair">Eşleşmeyi kaldır</string>
+    <string name="backup_stop">Durdur</string>
+    <string name="backup_now">Şimdi yedekle</string>
+    <string name="backup_scan">Tara</string>
+    <string name="backup_scan_busy">Taranıyor…</string>
+    <string name="backup_toggle_auto">Otomatik</string>
+    <string name="backup_toggle_wifi">Yalnızca Wi-Fi</string>
+    <string name="backup_toggle_charging">Şarjda</string>
+    <string name="backup_toggle_videos">Videolar</string>
+    <string name="backup_storage">Depolama</string>
+    <string name="backup_storage_reclaimable">Bu telefonda %1$s boşaltılabilir</string>
+    <string name="backup_storage_freed">%1$s zaten boşaltıldı</string>
+    <string name="backup_storage_server">Sunucu: %1$d öğe · %2$s boş</string>
+    <string name="backup_nothing_indexed">Henüz dizine eklenmiş bir şey yok. Bir tarama çalıştırın.</string>
+    <string name="backup_permission_title">Kadr\'ın fotoğraflarınızı ve videolarınızı okuması gerekiyor</string>
+    <string name="backup_permission_body">Bir yedekleme çalışana kadar cihazdan hiçbir şey çıkmaz.</string>
+    <string name="backup_grant">İzin ver</string>
+    <string name="backup_no_server">sunucu ayarlanmadı</string>
+    <string name="backup_counts">%1$d dizinde · %2$d doğrulandı</string>
+    <string name="backup_counts_failed"> · %1$d başarısız</string>
+    <string name="backup_counts_skipped"> · %1$d atlandı</string>
+    <string name="backup_reading_mediastore">MediaStore okunuyor… %1$d dosya</string>
+    <string name="backup_phase_idle">Boşta</string>
+    <string name="backup_phase_scanning">MediaStore taranıyor</string>
+    <string name="backup_phase_hashing">Dosya parmak izleri çıkarılıyor</string>
+    <string name="backup_phase_checking">Sunucuya neye ihtiyacı olduğu soruluyor</string>
+    <string name="backup_phase_uploading">Yedekleniyor: %1$d / %2$d</string>
+    <string name="backup_failed_count">%1$d başarısız</string>
+    <string name="backup_retry_all">Hepsini yeniden dene</string>
+    <string name="backup_failure_line">%1$s — %2$s (%3$d. deneme)</string>
+    <string name="backup_send">Gönder</string>
+    <string name="backup_msg_scanned">%1$d tarandı: %2$d yeni, %3$d değişmiş, %4$d aynı.</string>
+    <string name="backup_msg_scan_failed">Tarama başarısız: %1$s</string>
+    <string name="backup_msg_queued">Yedekleme sıraya alındı.</string>
+    <string name="backup_msg_stopping">Şu anki dosyadan sonra duracak.</string>
+    <string name="backup_msg_retry_queued">%1$d başarısız öğe yeniden sıraya alındı.</string>
+    <string name="backup_msg_nothing_failed">Başarısız olan yok.</string>
+    <string name="backup_msg_uploaded">Yüklendi. Sunucu öğe kimliği %1$s</string>
+    <string name="backup_msg_upload_failed">Yükleme başarısız: %1$s</string>
+
+    <!-- AssetState çipleri -->
+    <string name="state_discovered">bulundu</string>
+    <string name="state_hashed">parmak izi alındı</string>
+    <string name="state_checked">denetlendi</string>
+    <string name="state_uploading">yükleniyor</string>
+    <string name="state_verified">doğrulandı</string>
+    <string name="state_local_freed">yerelden silindi</string>
+    <string name="state_skipped">atlandı</string>
+    <string name="state_failed">başarısız</string>
+</resources>

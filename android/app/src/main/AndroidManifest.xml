@@ -8,6 +8,13 @@
     <!-- API 33+ -->
     <uses-permission android:name="android.permission.READ_MEDIA_IMAGES" />
     <uses-permission android:name="android.permission.READ_MEDIA_VIDEO" />
+    <!--
+      API 34+ lets the user hand over a chosen handful instead of the library.
+      Declared so that choice registers as access rather than as a refusal —
+      without it the app asks again forever while MediaStore quietly serves the
+      photos that were picked.
+    -->
+    <uses-permission android:name="android.permission.READ_MEDIA_VISUAL_USER_SELECTED" />
     <!-- API 26..32 -->
     <uses-permission
         android:name="android.permission.READ_EXTERNAL_STORAGE"
@@ -29,6 +36,7 @@
         android:allowBackup="false"
         android:icon="@mipmap/ic_launcher"
         android:label="@string/app_name"
+        android:localeConfig="@xml/locales_config"
         android:roundIcon="@mipmap/ic_launcher_round"
         android:supportsRtl="true"
         android:theme="@style/Theme.Kadr">
