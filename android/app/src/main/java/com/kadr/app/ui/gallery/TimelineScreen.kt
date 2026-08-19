@@ -72,6 +72,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.pluralStringResource
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
@@ -82,8 +84,10 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.kadr.app.R
 import androidx.media3.common.MediaItem
 import androidx.media3.common.Player
+import androidx.media3.common.util.UnstableApi
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.ui.AspectRatioFrameLayout
 import androidx.media3.ui.PlayerView
@@ -195,15 +199,19 @@ fun SharedTransitionScope.TimelineScreen(
     Scaffold(
         snackbarHost = { SnackbarHost(snackbarHostState) },
         containerColor = KadrBase,
-    ) { _ ->
+    ) { scaffoldPadding ->
         Box(modifier = Modifier.fillMaxSize()) {
 
             LazyVerticalGrid(
                 state = gridState,
                 columns = GridCells.Fixed(viewModel.columns),
                 contentPadding = PaddingValues(
+                    // The chrome floats over the grid, so the top inset is
+                    // measured from it rather than taken from the Scaffold. The
+                    // bottom one is the navigation bar, and a bare constant
+                    // leaves the last row of photos underneath it.
                     top = with(density) { chromeHeight.toDp() },
-                    bottom = 96.dp,
+                    bottom = 96.dp + scaffoldPadding.calculateBottomPadding(),
                 ),
                 horizontalArrangement = Arrangement.spacedBy(2.dp),
                 verticalArrangement = Arrangement.spacedBy(2.dp),
@@ -352,20 +360,18 @@ fun SharedTransitionScope.TimelineScreen(
     freeUpPlan?.let { plan ->
         AlertDialog(
             onDismissRequest = viewModel::cancelFreeUp,
-            title = { Text("Remove ${plan.assets.size} from this phone?") },
+            title = { Text(stringResource(R.string.timeline_remove_title, plan.assets.size)) },
             text = {
-                Text(
-                    buildString {
-                        append("${formatBytes(plan.totalBytes)} will be freed. ")
-                        append("The server keeps its copy — these stay in the timeline.")
-                        if (plan.withheld > 0) {
-                            append(
-                                "\n\n${plan.withheld} were left alone: the server could not " +
-                                    "confirm it still has them.",
-                            )
-                        }
-                    },
+                val body = stringResource(
+                    R.string.timeline_remove_body,
+                    formatBytes(plan.totalBytes),
                 )
+                val withheld = if (plan.withheld > 0) {
+                    stringResource(R.string.timeline_remove_withheld, plan.withheld)
+                } else {
+                    ""
+                }
+                Text(body + withheld)
             },
             confirmButton = {
                 TextButton(
@@ -377,10 +383,10 @@ fun SharedTransitionScope.TimelineScreen(
                             viewModel.deleteWithoutSystemDialog(plan)
                         }
                     },
-                ) { Text("Remove") }
+                ) { Text(stringResource(R.string.timeline_remove_confirm)) }
             },
             dismissButton = {
-                TextButton(onClick = viewModel::cancelFreeUp) { Text("Cancel") }
+                TextButton(onClick = viewModel::cancelFreeUp) { Text(stringResource(R.string.common_cancel)) }
             },
         )
     }
@@ -415,16 +421,22 @@ private fun AlbumPicker(
     AlertDialog(
         onDismissRequest = onDismiss,
         title = {
-            Text(if (selectionSize == 1) "Add 1 photo to…" else "Add $selectionSize photos to…")
+            Text(
+                pluralStringResource(
+                    R.plurals.timeline_add_to_title,
+                    selectionSize,
+                    selectionSize,
+                ),
+            )
         },
         text = {
             if (albums.isEmpty()) {
-                Text("No albums yet. Make one from the albums screen first.")
+                Text(stringResource(R.string.timeline_no_albums))
             } else {
                 Column {
                     albums.forEach { album ->
                         Text(
-                            text = "${album.name}  ·  ${album.itemCount}",
+                            text = stringResource(R.string.timeline_album_row, album.name, album.itemCount),
                             style = MaterialTheme.typography.bodyLarge,
                             modifier = Modifier
                                 .fillMaxWidth()
@@ -436,7 +448,7 @@ private fun AlbumPicker(
             }
         },
         confirmButton = {},
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.common_cancel)) } },
     )
 }
 
@@ -467,13 +479,13 @@ private fun SelectionChrome(
         IconButton(onClick = onClose) {
             Icon(
                 imageVector = Icons.Default.Close,
-                contentDescription = "Stop selecting",
+                contentDescription = stringResource(R.string.timeline_stop_selecting),
                 tint = MaterialTheme.colorScheme.onSurface,
             )
         }
 
         Text(
-            text = "$count selected",
+            text = stringResource(R.string.timeline_selected_count, count),
             style = MaterialTheme.typography.titleMedium,
             color = MaterialTheme.colorScheme.onSurface,
             modifier = Modifier
@@ -493,14 +505,14 @@ private fun SelectionChrome(
             IconButton(onClick = onAddToAlbum) {
                 Icon(
                     imageVector = Icons.Default.LibraryAdd,
-                    contentDescription = "Add to an album",
+                    contentDescription = stringResource(R.string.timeline_add_to_album),
                     tint = MaterialTheme.colorScheme.onSurface,
                 )
             }
             IconButton(onClick = onFreeUp) {
                 Icon(
                     imageVector = Icons.Default.DeleteSweep,
-                    contentDescription = "Free up space on this phone",
+                    contentDescription = stringResource(R.string.timeline_free_up),
                     tint = MaterialTheme.colorScheme.onSurface,
                 )
             }
@@ -532,9 +544,9 @@ private fun TopChrome(
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Column(modifier = Modifier.weight(1f)) {
-                Text("Kadr", style = MaterialTheme.typography.displaySmall)
+                Text(stringResource(R.string.app_name), style = MaterialTheme.typography.displaySmall)
                 Text(
-                    text = "$photoCount photos",
+                    text = pluralStringResource(R.plurals.timeline_photo_count, photoCount, photoCount),
                     style = MaterialTheme.typography.bodySmall,
                     color = KadrMuted,
                 )
@@ -551,7 +563,7 @@ private fun TopChrome(
             IconButton(onClick = onOpenAlbums) {
                 Icon(
                     imageVector = Icons.Default.PhotoAlbum,
-                    contentDescription = "Albums",
+                    contentDescription = stringResource(R.string.timeline_albums),
                     tint = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
@@ -559,7 +571,7 @@ private fun TopChrome(
             IconButton(onClick = onOpenBackup) {
                 Icon(
                     imageVector = Icons.Default.Settings,
-                    contentDescription = "Backup status",
+                    contentDescription = stringResource(R.string.timeline_backup_status),
                     tint = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
@@ -585,13 +597,14 @@ private fun TopChrome(
                 )
                 Column {
                     Text(
-                        text = "The server is out of space",
+                        text = stringResource(R.string.timeline_server_full),
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onErrorContainer,
                     )
                     Text(
-                        text = full.freeBytes?.let { "${formatBytes(it)} left — free some up or add a disk" }
-                            ?: "Free some up or add a disk",
+                        text = full.freeBytes?.let {
+                            stringResource(R.string.timeline_server_full_detail, formatBytes(it))
+                        } ?: stringResource(R.string.timeline_server_full_detail_unknown),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onErrorContainer,
                     )
@@ -628,6 +641,8 @@ private fun MonthDivider(label: String, modifier: Modifier = Modifier) {
 }
 
 @OptIn(ExperimentalSharedTransitionApi::class)
+// PlayerView and its shutter colour are media3's own unstable surface.
+@androidx.annotation.OptIn(UnstableApi::class)
 @Composable
 private fun SharedTransitionScope.GalleryCell(
     item: GalleryItem,
@@ -754,7 +769,7 @@ private fun SharedTransitionScope.GalleryCell(
         if (item.isLocalOnly && !selecting) {
             Icon(
                 imageVector = Icons.Default.CloudOff,
-                contentDescription = "Not backed up yet",
+                contentDescription = stringResource(R.string.timeline_not_backed_up),
                 tint = Color.White.copy(alpha = 0.75f),
                 modifier = Modifier
                     .align(Alignment.TopEnd)
@@ -766,7 +781,11 @@ private fun SharedTransitionScope.GalleryCell(
         if (selecting) {
             Icon(
                 imageVector = if (selected) Icons.Default.CheckCircle else Icons.Default.RadioButtonUnchecked,
-                contentDescription = if (selected) "Selected" else "Not selected",
+                contentDescription = if (selected) {
+                    stringResource(R.string.timeline_selected)
+                } else {
+                    stringResource(R.string.timeline_not_selected)
+                },
                 tint = if (selected) KadrAmber else Color.White.copy(alpha = 0.8f),
                 modifier = Modifier
                     .align(Alignment.TopStart)
@@ -784,11 +803,15 @@ private fun EmptyTimeline(syncing: Boolean, modifier: Modifier = Modifier) {
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         Text(
-            text = if (syncing) "Reading the library…" else "Nothing here yet",
+            text = if (syncing) {
+                stringResource(R.string.timeline_reading_library)
+            } else {
+                stringResource(R.string.timeline_empty_title)
+            },
             style = MaterialTheme.typography.headlineMedium,
         )
         Text(
-            text = "Grant access and run a backup — photos show up as soon as they are indexed.",
+            text = stringResource(R.string.timeline_empty_subtitle),
             style = MaterialTheme.typography.bodyMedium,
             color = KadrMuted,
             modifier = Modifier.padding(top = 8.dp),

@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  The languages Kadr actually ships strings for. On API 33+ this is what puts
+  Kadr in Settings > System > Languages > App languages, so the app can be set
+  to Turkish without changing the whole phone. Below 33 it is ignored and the
+  system language decides, which values-tr already answers.
+-->
+<locale-config xmlns:android="http://schemas.android.com/apk/res/android">
+    <locale android:name="en" />
+    <locale android:name="tr" />
+</locale-config>

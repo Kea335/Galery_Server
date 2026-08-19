@@ -1,8 +1,10 @@
 package com.kadr.app.data.video
 
 import android.content.Context
+import androidx.annotation.OptIn
 import androidx.media3.common.AudioAttributes
 import androidx.media3.common.C
+import androidx.media3.common.util.UnstableApi
 import androidx.media3.datasource.DefaultDataSource
 import androidx.media3.datasource.cache.CacheDataSource
 import androidx.media3.datasource.cache.SimpleCache
@@ -28,6 +30,7 @@ import javax.inject.Singleton
  * work, which is the entire reason the server can be a weak box (§4).
  */
 @Singleton
+@OptIn(UnstableApi::class)
 class PlayerFactory @Inject constructor(
     @param:ApplicationContext private val context: Context,
     private val apiProvider: ApiProvider,

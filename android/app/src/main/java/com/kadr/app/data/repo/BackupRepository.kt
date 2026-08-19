@@ -122,6 +122,15 @@ class BackupRepository @Inject constructor(
 
     suspend fun retryFailed(): Int = withContext(Dispatchers.IO) { dao.resetFailures() }
 
+    /**
+     * Un-parks everything §10.5's rules parked, for when those rules change.
+     *
+     * Called from the toggles rather than from [runBackup]: doing it on every
+     * run would re-park the same files every few hours and report them as
+     * "skipped" each time, which is noise rather than news.
+     */
+    suspend fun requeueSkipped(): Int = withContext(Dispatchers.IO) { dao.requeueSkipped() }
+
     suspend fun reclaimableBytes(): Long = withContext(Dispatchers.IO) { dao.reclaimableBytes() }
 
     suspend fun freedBytes(): Long = withContext(Dispatchers.IO) { dao.freedBytes() }
@@ -336,6 +345,13 @@ class BackupRepository @Inject constructor(
                     }
                 }
 
+                // "The server is out of space" is a claim about now, not a
+                // memory. A run that reached the end without being turned away
+                // has disproved it — otherwise the banner would sit there until
+                // the next actual upload, which for a fully deduped library
+                // never comes.
+                if (!diskFull) _serverFull.value = null
+
                 BackupOutcome(
                     uploaded = uploaded,
                     deduped = deduped,
@@ -540,22 +556,23 @@ class BackupRepository @Inject constructor(
     private suspend fun <T> withRetry(attempts: Int = CHUNK_ATTEMPTS, block: suspend () -> T): T {
         var last: Exception? = null
         repeat(attempts) { attempt ->
-            try {
+            val failure = try {
                 return block()
             } catch (e: ApiException) {
                 if (e.isRecoverable || e.isPermanent) throw e
-                last = e
+                e
             } catch (e: CancellationException) {
                 throw e
             } catch (e: IOException) {
-                last = e
+                e
             } catch (e: SerializationException) {
                 // A truncated or empty body reads as a parse error, not an
                 // IOException. On a flaky link that is transient, so it earns a
                 // retry rather than failing the whole file.
-                last = e
+                e
             }
-            Log.w(TAG, "retry ${attempt + 1}/$attempts after ${last?.let { it::class.java.name }}")
+            last = failure
+            Log.w(TAG, "retry ${attempt + 1}/$attempts after ${failure::class.java.name}")
             if (attempt < attempts - 1) delay(backoffMillis(attempt))
         }
         throw last ?: IOException("Retries exhausted")

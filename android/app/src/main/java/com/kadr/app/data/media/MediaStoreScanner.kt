@@ -10,6 +10,11 @@ import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.withContext
+import java.time.LocalDateTime
+import java.time.ZoneId
+import java.time.ZoneOffset
+import java.time.format.DateTimeFormatter
+import java.util.Locale
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlin.coroutines.coroutineContext
@@ -184,9 +189,57 @@ class MediaStoreScanner @Inject constructor(
     private fun exifDate(uri: Uri): Long? = runCatching {
         context.contentResolver.openInputStream(uri)?.use { stream ->
             val exif = ExifInterface(stream)
-            exif.dateTimeOriginal ?: exif.dateTime
+            exifTimestamp(
+                exif.getAttribute(ExifInterface.TAG_DATETIME_ORIGINAL),
+                exif.getAttribute(ExifInterface.TAG_SUBSEC_TIME_ORIGINAL),
+                exif.getAttribute(ExifInterface.TAG_OFFSET_TIME_ORIGINAL),
+            ) ?: exifTimestamp(
+                exif.getAttribute(ExifInterface.TAG_DATETIME),
+                exif.getAttribute(ExifInterface.TAG_SUBSEC_TIME),
+                exif.getAttribute(ExifInterface.TAG_OFFSET_TIME),
+            )
         }
     }.getOrNull()?.takeIf { it > 0L }
+
+    /**
+     * `"2024:05:01 09:12:33"` and its neighbouring tags, as epoch milliseconds.
+     *
+     * Parsed here rather than through `ExifInterface.getDateTimeOriginal()`,
+     * which androidx marks `@RestrictTo(LIBRARY)` — and which reads the wall
+     * clock **as if it were UTC**. Every timestamp in this app is true epoch
+     * milliseconds and the UI converts back with the device's zone, so that
+     * reading would put every EXIF-dated photo out by the local offset: a photo
+     * taken at nine in the morning showing up at one in the afternoon, and
+     * occasionally sorting into the wrong month.
+     *
+     * EXIF 2.31 added an explicit offset tag. When it is there it is the answer;
+     * when it is not, the camera's clock was almost certainly this phone's, so
+     * the device zone is the least wrong reading available.
+     */
+    private fun exifTimestamp(dateTime: String?, subSeconds: String?, offset: String?): Long? {
+        // "0000:00:00 00:00:00" is how cameras write "no idea".
+        if (dateTime == null || dateTime.none { it in '1'..'9' }) return null
+
+        val wallClock = EXIF_DATE_FORMATS.firstNotNullOfOrNull { format ->
+            runCatching { LocalDateTime.parse(dateTime.trim(), format) }.getOrNull()
+        } ?: return null
+
+        val zone: ZoneId = offset?.let { runCatching { ZoneOffset.of(it.trim()) }.getOrNull() }
+            ?: ZoneId.systemDefault()
+
+        return wallClock.atZone(zone).toInstant().toEpochMilli() + subSecondMillis(subSeconds)
+    }
+
+    /** `"25"` is a quarter of a second, not 25 ms — EXIF writes a fraction. */
+    private fun subSecondMillis(subSeconds: String?): Long {
+        val digits = subSeconds?.trim()?.takeWhile(Char::isDigit)?.take(3) ?: return 0L
+        val value = digits.toLongOrNull() ?: return 0L
+        return when (digits.length) {
+            1 -> value * 100
+            2 -> value * 10
+            else -> value
+        }
+    }
 
     private fun isExcluded(relativePath: String, excluded: Set<String>): Boolean {
         if (excluded.isEmpty()) return false
@@ -197,5 +250,11 @@ class MediaStoreScanner @Inject constructor(
     companion object {
         /** Defaults from §10.1; the user can change them in Settings. */
         val DEFAULT_EXCLUDED_FOLDERS = setOf(".thumbnails", "WhatsApp", "Screenshots")
+
+        /** The colon form is the spec; the dashed one is what some phones write. */
+        private val EXIF_DATE_FORMATS = listOf(
+            DateTimeFormatter.ofPattern("yyyy:MM:dd HH:mm:ss", Locale.US),
+            DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss", Locale.US),
+        )
     }
 }

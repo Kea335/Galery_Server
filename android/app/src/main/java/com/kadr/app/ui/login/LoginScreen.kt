@@ -32,6 +32,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardCapitalization
@@ -41,6 +42,7 @@ import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.kadr.app.R
 import com.kadr.app.ui.formatBytes
 import com.kadr.app.ui.theme.KadrMuted
 
@@ -68,12 +70,12 @@ fun LoginScreen(
             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
             Text(
-                text = "Kadr",
+                text = stringResource(R.string.app_name),
                 style = MaterialTheme.typography.displaySmall,
                 fontWeight = FontWeight.Bold,
             )
             Text(
-                text = "Point the app at your server and sign in. Every phone that signs in sees the same library.",
+                text = stringResource(R.string.login_subtitle),
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -81,7 +83,7 @@ fun LoginScreen(
             OutlinedTextField(
                 value = state.serverUrl,
                 onValueChange = viewModel::onServerUrlChange,
-                label = { Text("Server address") },
+                label = { Text(stringResource(R.string.login_server_address)) },
                 placeholder = { Text("192.168.1.8:8787") },
                 singleLine = true,
                 enabled = !state.busy,
@@ -94,7 +96,7 @@ fun LoginScreen(
                 enabled = !state.busy,
                 modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp),
             ) {
-                Text("Test connection")
+                Text(stringResource(R.string.login_test_connection))
             }
 
             state.health?.let { health ->
@@ -108,15 +110,19 @@ fun LoginScreen(
                         modifier = Modifier.padding(16.dp),
                         verticalArrangement = Arrangement.spacedBy(4.dp),
                     ) {
-                        Text("Reached Kadr ${health.version}", fontWeight = FontWeight.SemiBold)
+                        Text(stringResource(R.string.login_reached, health.version), fontWeight = FontWeight.SemiBold)
                         Text(
-                            "${health.assetCount} assets · ${health.freeDiskBytes?.let(::formatBytes) ?: "?"} free",
+                            stringResource(
+                                R.string.login_health_summary,
+                                health.assetCount,
+                                health.freeDiskBytes?.let(::formatBytes) ?: "?",
+                            ),
                             style = MaterialTheme.typography.bodySmall,
                             color = KadrMuted,
                         )
                         if (health.thumbnails != "available") {
                             Text(
-                                "Thumbnails unavailable — ffmpeg is not installed on the server.",
+                                stringResource(R.string.login_thumbnails_unavailable),
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.error,
                             )
@@ -128,7 +134,7 @@ fun LoginScreen(
             OutlinedTextField(
                 value = state.username,
                 onValueChange = viewModel::onUsernameChange,
-                label = { Text("Username") },
+                label = { Text(stringResource(R.string.login_username)) },
                 singleLine = true,
                 enabled = !state.busy,
                 keyboardOptions = KeyboardOptions(
@@ -142,7 +148,7 @@ fun LoginScreen(
             OutlinedTextField(
                 value = state.password,
                 onValueChange = viewModel::onPasswordChange,
-                label = { Text("Password") },
+                label = { Text(stringResource(R.string.login_password)) },
                 singleLine = true,
                 enabled = !state.busy,
                 visualTransformation = if (passwordVisible) {
@@ -163,9 +169,9 @@ fun LoginScreen(
                                 Icons.Default.Visibility
                             },
                             contentDescription = if (passwordVisible) {
-                                "Hide password"
+                                stringResource(R.string.login_hide_password)
                             } else {
-                                "Show password"
+                                stringResource(R.string.login_show_password)
                             },
                         )
                     }
@@ -193,17 +199,17 @@ fun LoginScreen(
                         color = MaterialTheme.colorScheme.onPrimary,
                     )
                 }
-                Text("Sign in")
+                Text(stringResource(R.string.login_sign_in))
             }
 
             Text(
-                text = "No account yet? On the server: node src/cli.js user add <name>",
+                text = stringResource(R.string.login_no_account),
                 style = MaterialTheme.typography.bodySmall,
                 color = KadrMuted,
                 modifier = Modifier.align(Alignment.CenterHorizontally),
             )
             Text(
-                text = "Debug builds allow plain HTTP so you can sign in before installing the server's certificate. Release builds require TLS.",
+                text = stringResource(R.string.login_cleartext_note),
                 style = MaterialTheme.typography.bodySmall,
                 color = KadrMuted,
             )

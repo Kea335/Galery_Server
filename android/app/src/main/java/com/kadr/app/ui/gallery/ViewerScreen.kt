@@ -44,6 +44,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
@@ -58,6 +59,7 @@ import com.kadr.app.data.local.GalleryItem
 import com.kadr.app.ui.albums.AlbumsViewModel
 import com.kadr.app.ui.formatBytes
 import com.kadr.app.ui.formatDuration
+import com.kadr.app.R
 import com.kadr.app.ui.theme.KadrMuted
 import java.time.Instant
 import java.time.ZoneId
@@ -226,7 +228,7 @@ private fun ViewerChrome(item: GalleryItem?, onClose: () -> Unit) {
             IconButton(onClick = onClose) {
                 Icon(
                     imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                    contentDescription = "Back",
+                    contentDescription = stringResource(R.string.common_back),
                     tint = Color.White,
                 )
             }
@@ -263,7 +265,7 @@ private fun ViewerChrome(item: GalleryItem?, onClose: () -> Unit) {
             if (item?.isLocalOnly == true) {
                 Icon(
                     imageVector = Icons.Default.CloudOff,
-                    contentDescription = "Not backed up yet",
+                    contentDescription = stringResource(R.string.timeline_not_backed_up),
                     tint = Color.White.copy(alpha = 0.8f),
                     modifier = Modifier.padding(end = 16.dp).size(18.dp),
                 )
@@ -424,24 +426,30 @@ private fun SharedTransitionScope.ZoomableMedia(
                 },
         )
 
+        // A video only reaches this branch when there are no bytes to play: the
+        // file has been freed from this phone and the server has no id for it
+        // either. The poster frame and an honest line beat a player that would
+        // spin forever.
         if (item.isVideo) {
-            // Playback itself is M5; until then the poster frame and a clear
-            // affordance beat a broken player.
             Column(
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
                 Icon(
                     imageVector = Icons.Default.PlayArrow,
-                    contentDescription = "Video",
+                    contentDescription = stringResource(R.string.viewer_video),
                     tint = Color.White,
                     modifier = Modifier
                         .size(64.dp)
                         .background(Color.Black.copy(alpha = 0.35f), CircleShapeCompat)
                         .padding(8.dp),
                 )
+                val missingLabel = stringResource(R.string.viewer_video_missing)
                 Text(
-                    text = "Playback arrives in M5 · ${item.durationMs?.let(::formatDuration) ?: ""}",
+                    text = buildString {
+                        append(missingLabel)
+                        item.durationMs?.let { append(" · ${formatDuration(it)}") }
+                    },
                     style = MaterialTheme.typography.bodySmall,
                     color = Color.White.copy(alpha = 0.8f),
                 )

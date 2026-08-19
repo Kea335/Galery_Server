@@ -38,12 +38,15 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.pluralStringResource
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.kadr.app.R
 import coil3.compose.AsyncImage
 import com.kadr.app.data.local.AlbumSummary
 
@@ -77,17 +80,17 @@ fun AlbumsScreen(
         snackbarHost = { SnackbarHost(snackbarHostState) },
         topBar = {
             TopAppBar(
-                title = { Text("Albums") },
+                title = { Text(stringResource(R.string.albums_title)) },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.common_back))
                     }
                 },
             )
         },
         floatingActionButton = {
             FloatingActionButton(onClick = { naming = true }) {
-                Icon(Icons.Default.Add, contentDescription = "New album")
+                Icon(Icons.Default.Add, contentDescription = stringResource(R.string.albums_new))
             }
         },
     ) { padding ->
@@ -97,8 +100,7 @@ fun AlbumsScreen(
                 modifier = Modifier.fillMaxSize().padding(padding).padding(32.dp),
             ) {
                 Text(
-                    text = "No albums yet. Make one, then pick photos in the timeline and add " +
-                        "them — every phone signed in to this server will see it.",
+                    text = stringResource(R.string.albums_empty),
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -125,7 +127,7 @@ fun AlbumsScreen(
 
     if (naming) {
         NameDialog(
-            title = "New album",
+            title = stringResource(R.string.albums_new),
             initial = "",
             onDismiss = { naming = false },
             onConfirm = { name ->
@@ -164,7 +166,11 @@ private fun AlbumCard(album: AlbumSummary, cover: Any?, onClick: () -> Unit) {
             modifier = Modifier.padding(top = 8.dp),
         )
         Text(
-            text = if (album.itemCount == 1) "1 photo" else "${album.itemCount} photos",
+            text = pluralStringResource(
+                R.plurals.albums_photo_count,
+                album.itemCount,
+                album.itemCount,
+            ),
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
@@ -188,15 +194,15 @@ fun NameDialog(
                 value = text,
                 onValueChange = { text = it },
                 singleLine = true,
-                label = { Text("Name") },
+                label = { Text(stringResource(R.string.common_name)) },
             )
         },
         confirmButton = {
             TextButton(
                 enabled = text.isNotBlank(),
                 onClick = { onConfirm(text.trim()) },
-            ) { Text("Save") }
+            ) { Text(stringResource(R.string.common_save)) }
         },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.common_cancel)) } },
     )
 }

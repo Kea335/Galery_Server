@@ -39,11 +39,13 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.kadr.app.R
 import com.kadr.app.ui.formatBytes
 import com.kadr.app.ui.rememberHaptics
 import com.kadr.app.ui.theme.KadrAmber
@@ -87,10 +89,10 @@ fun SettingsScreen(
         snackbarHost = { SnackbarHost(snackbarHostState) },
         topBar = {
             TopAppBar(
-                title = { Text("Settings") },
+                title = { Text(stringResource(R.string.settings_title)) },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.common_back))
                     }
                 },
             )
@@ -102,7 +104,7 @@ fun SettingsScreen(
                 .padding(padding)
                 .verticalScroll(rememberScrollState()),
         ) {
-            SectionHeader("Server")
+            SectionHeader(stringResource(R.string.settings_section_server))
             Card(
                 colors = CardDefaults.cardColors(
                     containerColor = MaterialTheme.colorScheme.surfaceContainer,
@@ -113,11 +115,15 @@ fun SettingsScreen(
                     modifier = Modifier.padding(16.dp),
                     verticalArrangement = Arrangement.spacedBy(4.dp),
                 ) {
-                    Text(settings.serverUrl.ifBlank { "not paired" })
+                    Text(settings.serverUrl.ifBlank { stringResource(R.string.settings_not_paired) })
                     health?.let {
                         Text(
-                            "Kadr ${it.version} · ${it.assetCount} assets · " +
-                                (it.freeDiskBytes?.let(::formatBytes) ?: "?") + " free",
+                            stringResource(
+                                R.string.settings_server_summary,
+                                it.version,
+                                it.assetCount,
+                                it.freeDiskBytes?.let(::formatBytes) ?: "?",
+                            ),
                             style = MaterialTheme.typography.bodySmall,
                             color = KadrMuted,
                         )
@@ -125,39 +131,39 @@ fun SettingsScreen(
                     TextButton(
                         onClick = {
                             haptics.select()
-                            onUnpaired()
+                            viewModel.unpair(onUnpaired)
                         },
                     ) {
-                        Text("Unpair this device", color = KadrCoral)
+                        Text(stringResource(R.string.settings_unpair), color = KadrCoral)
                     }
                 }
             }
 
-            SectionHeader("When to back up")
+            SectionHeader(stringResource(R.string.settings_section_when))
             SettingSwitch(
-                title = "Automatic backup",
-                subtitle = "Runs every few hours in the background",
+                title = stringResource(R.string.settings_auto_title),
+                subtitle = stringResource(R.string.settings_auto_subtitle),
                 checked = settings.autoBackup,
                 onChange = { haptics.select(); viewModel.setAutoBackup(it) },
             )
             SettingSwitch(
-                title = "Wi-Fi only",
-                subtitle = "Never spend mobile data",
+                title = stringResource(R.string.settings_wifi_title),
+                subtitle = stringResource(R.string.settings_wifi_subtitle),
                 checked = settings.wifiOnly,
                 onChange = { haptics.select(); viewModel.setWifiOnly(it) },
             )
             SettingSwitch(
-                title = "Only while charging",
+                title = stringResource(R.string.settings_charging_title),
                 checked = settings.chargingOnly,
                 onChange = { haptics.select(); viewModel.setChargingOnly(it) },
             )
             SettingSwitch(
-                title = "Include videos",
+                title = stringResource(R.string.settings_videos_title),
                 checked = settings.includeVideos,
                 onChange = { haptics.select(); viewModel.setIncludeVideos(it) },
             )
 
-            SectionHeader("Skipped folders")
+            SectionHeader(stringResource(R.string.settings_section_skipped))
             viewModel.knownFolders.forEach { folder ->
                 SettingSwitch(
                     title = folder,
@@ -166,38 +172,46 @@ fun SettingsScreen(
                 )
             }
 
-            SectionHeader("Appearance")
+            SectionHeader(stringResource(R.string.settings_section_appearance))
             SettingSwitch(
-                title = "Use system colours",
-                subtitle = "Material You instead of Kadr's own palette",
+                title = stringResource(R.string.settings_dynamic_title),
+                subtitle = stringResource(R.string.settings_dynamic_subtitle),
                 checked = settings.dynamicColor,
                 enabled = Build.VERSION.SDK_INT >= Build.VERSION_CODES.S,
                 onChange = { haptics.select(); viewModel.setDynamicColor(it) },
             )
 
-            SectionHeader("Storage")
+            SectionHeader(stringResource(R.string.settings_section_storage))
             SettingRow(
-                title = "Media cache",
-                subtitle = "${formatBytes(cacheBytes)} used of ${settings.videoCacheMb} MB",
+                title = stringResource(R.string.settings_cache_title),
+                subtitle = stringResource(
+                    R.string.settings_cache_subtitle,
+                    formatBytes(cacheBytes),
+                    settings.videoCacheMb,
+                ),
                 onClick = { haptics.select(); viewModel.clearMediaCache() },
-                trailing = { Text("Clear", color = KadrAmber) },
+                trailing = { Text(stringResource(R.string.settings_clear), color = KadrAmber) },
             )
             SettingRow(
-                title = "Trash",
-                subtitle = "Deleted photos are kept for a while before they go",
+                title = stringResource(R.string.settings_trash_title),
+                subtitle = stringResource(R.string.settings_trash_subtitle),
                 onClick = onOpenTrash,
             )
             SettingRow(
-                title = "Free up space",
-                subtitle = "Remove local copies the server has confirmed",
+                title = stringResource(R.string.settings_free_title),
+                subtitle = stringResource(R.string.settings_free_subtitle),
                 enabled = !busy,
                 onClick = { viewModel.prepareFreeUp() },
-                trailing = { Text(if (busy) "Checking…" else "", color = KadrMuted) },
+                trailing = {
+                    Text(
+                        if (busy) stringResource(R.string.settings_checking) else "",
+                        color = KadrMuted,
+                    )
+                },
             )
 
             Text(
-                text = "Kadr never deletes anything on its own. Freeing space asks the server to " +
-                    "confirm every file first, and then Android asks you.",
+                text = stringResource(R.string.settings_footer),
                 style = MaterialTheme.typography.bodySmall,
                 color = KadrMuted,
                 modifier = Modifier.padding(16.dp),
@@ -208,17 +222,28 @@ fun SettingsScreen(
     plan?.let { current ->
         AlertDialog(
             onDismissRequest = viewModel::cancelFreeUp,
-            title = { Text("Free up ${formatBytes(current.totalBytes)}?") },
+            title = {
+                Text(
+                    stringResource(
+                        R.string.settings_free_dialog_title,
+                        formatBytes(current.totalBytes),
+                    ),
+                )
+            },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text(
-                        "${current.assets.size} files will be removed from this phone. " +
-                            "The server has just confirmed it holds every one of them.",
+                        stringResource(
+                            R.string.settings_free_dialog_body,
+                            current.assets.size,
+                        ),
                     )
                     if (current.withheld > 0) {
                         Text(
-                            "${current.withheld} file(s) were left alone — the server could not " +
-                                "vouch for them.",
+                            stringResource(
+                                R.string.settings_free_dialog_withheld,
+                                current.withheld,
+                            ),
                             color = KadrCoral,
                             style = MaterialTheme.typography.bodySmall,
                         )
@@ -234,10 +259,10 @@ fun SettingsScreen(
                     } else {
                         viewModel.deleteWithoutSystemDialog(current)
                     }
-                }) { Text("Continue") }
+                }) { Text(stringResource(R.string.common_continue)) }
             },
             dismissButton = {
-                TextButton(onClick = viewModel::cancelFreeUp) { Text("Cancel") }
+                TextButton(onClick = viewModel::cancelFreeUp) { Text(stringResource(R.string.common_cancel)) }
             },
         )
     }

@@ -1,6 +1,8 @@
 package com.kadr.app.data.video
 
 import android.content.Context
+import androidx.annotation.OptIn
+import androidx.media3.common.util.UnstableApi
 import androidx.media3.database.StandaloneDatabaseProvider
 import androidx.media3.datasource.cache.LeastRecentlyUsedCacheEvictor
 import androidx.media3.datasource.cache.SimpleCache
@@ -21,6 +23,7 @@ import javax.inject.Singleton
  * process, hence the singleton.
  */
 @Singleton
+@OptIn(UnstableApi::class)
 class VideoCache @Inject constructor(
     @param:ApplicationContext private val context: Context,
     private val settings: SettingsStore,
@@ -45,6 +48,7 @@ class VideoCache @Inject constructor(
          * instrumentation test shares the app's process — so anything that wants
          * its own cache has to name its own folder.
          */
+        @OptIn(UnstableApi::class)
         fun open(context: Context, sizeMb: Int, directoryName: String): SimpleCache = SimpleCache(
             File(context.cacheDir, directoryName),
             LeastRecentlyUsedCacheEvictor(sizeMb * 1024L * 1024L),

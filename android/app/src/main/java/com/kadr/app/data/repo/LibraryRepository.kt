@@ -134,6 +134,22 @@ class LibraryRepository @Inject constructor(
     }
 
     /**
+     * Throws away everything that describes one particular server: its mirrored
+     * library, and every local row's memory of having been backed up to it.
+     *
+     * Called when the device is unpaired. [SettingsStore.clearPairing] already
+     * resets the delta cursor so the next server is read "from the beginning",
+     * which only means anything if what the last one left behind goes too —
+     * otherwise its photos stay in the timeline forever, unreachable and
+     * impossible to remove, because the new server can never tombstone ids it
+     * never issued.
+     */
+    suspend fun forgetServer() = withContext(Dispatchers.IO) {
+        galleryDao.clearRemote()
+        galleryDao.forgetServerState()
+    }
+
+    /**
      * What is in the trash, with enough detail to show it. Delta sync only
      * carries tombstones, so the server has a dedicated endpoint for this.
      */
