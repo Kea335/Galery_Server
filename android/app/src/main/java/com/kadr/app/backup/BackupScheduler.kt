@@ -82,9 +82,21 @@ class BackupScheduler @Inject constructor(
         return workManager.enqueueUniqueWork(RESUME_WORK, ExistingWorkPolicy.REPLACE, request)
     }
 
+    /**
+     * Stops whatever is running now.
+     *
+     * WorkManager has no way to cancel one occurrence of a periodic job, so
+     * stopping a batch that came from the schedule means cancelling the schedule
+     * — and [sync] then puts it straight back. Without that, one tap on "Stop"
+     * would quietly mean "never automatically again", which is not what the
+     * button says. When the device is no longer paired [sync] cancels instead,
+     * so unpairing still leaves nothing behind.
+     */
     fun stop() {
         workManager.cancelUniqueWork(NOW_WORK)
-        workManager.cancelAllWorkByTag(TAG_BACKUP)
+        workManager.cancelUniqueWork(RESUME_WORK)
+        workManager.cancelUniqueWork(PERIODIC_WORK)
+        sync()
     }
 
     fun observeWork(): Flow<List<WorkInfo>> = workManager.getWorkInfosByTagFlow(TAG_BACKUP)
@@ -98,12 +110,6 @@ class BackupScheduler @Inject constructor(
             .setRequiresCharging(prefs.chargingOnly)
             .build()
     }
-
-    private fun networkOnlyConstraints(): Constraints = Constraints.Builder()
-        .setRequiredNetworkType(
-            if (settings.current.wifiOnly) NetworkType.UNMETERED else NetworkType.CONNECTED,
-        )
-        .build()
 
     private companion object {
         const val PERIODIC_WORK = "kadr-backup-periodic"

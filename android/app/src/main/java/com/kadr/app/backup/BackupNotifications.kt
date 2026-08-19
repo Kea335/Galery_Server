@@ -1,13 +1,18 @@
 package com.kadr.app.backup
 
+import android.Manifest
 import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
+import android.os.Build
+import android.util.Log
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
+import androidx.core.content.ContextCompat
 import androidx.work.WorkManager
 import com.kadr.app.MainActivity
 import com.kadr.app.R
@@ -65,6 +70,17 @@ class BackupNotifications @Inject constructor(
     }
 
     fun completionNotification(summary: String) {
+        // From API 33 the user can decline notifications outright. Checked
+        // rather than attempted, because a summary of a batch that has already
+        // finished is not worth throwing over — and below 33 the permission does
+        // not exist for checkSelfPermission to find, so the guard is skipped.
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+            ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) !=
+            PackageManager.PERMISSION_GRANTED
+        ) {
+            return
+        }
+
         val notification = baseBuilder()
             .setContentTitle(context.getString(R.string.backup_done_title))
             .setContentText(summary)
@@ -72,8 +88,11 @@ class BackupNotifications @Inject constructor(
             .setAutoCancel(true)
             .build()
 
-        runCatching {
+        try {
             NotificationManagerCompat.from(context).notify(DONE_NOTIFICATION_ID, notification)
+        } catch (e: SecurityException) {
+            // The permission can be revoked between the check above and here.
+            Log.w(TAG, "could not post the completion notification", e)
         }
     }
 
@@ -126,6 +145,7 @@ class BackupNotifications @Inject constructor(
     }
 
     companion object {
+        private const val TAG = "KadrNotifications"
         const val CHANNEL_ID = "kadr_backup"
         const val PROGRESS_NOTIFICATION_ID = 4201
         const val DONE_NOTIFICATION_ID = 4202

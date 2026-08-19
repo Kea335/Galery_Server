@@ -1,6 +1,8 @@
 package com.kadr.app.di
 
 import android.content.Context
+import androidx.annotation.OptIn
+import androidx.media3.common.util.UnstableApi
 import androidx.media3.datasource.cache.SimpleCache
 import androidx.room.Room
 import com.kadr.app.data.local.AlbumDao
@@ -43,6 +45,7 @@ object AppModule {
     /** The app's one media cache; tests open their own folder instead. */
     @Provides
     @Singleton
+    @OptIn(UnstableApi::class)
     fun provideMediaCache(videoCache: VideoCache): SimpleCache = videoCache.cache
 
     @Provides

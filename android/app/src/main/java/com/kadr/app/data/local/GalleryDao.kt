@@ -87,4 +87,28 @@ interface GalleryDao {
 
     @Query("DELETE FROM remote_assets")
     suspend fun clearRemote()
+
+    /**
+     * Forgets which server holds what, so the next one is asked from scratch.
+     *
+     * The hash stays — it describes the file, not the server — so re-verifying a
+     * whole library costs one batched check per 500 photos (§10.3) rather than
+     * re-reading every byte. Without this a phone that pairs with a different
+     * server keeps every row VERIFIED and quietly never uploads anything to it.
+     *
+     * LOCAL_FREED and SKIPPED rows are left alone: the first has no file left on
+     * this phone to send, and the second is parked by a rule the user set, which
+     * unpairing does not change.
+     */
+    @Query(
+        """
+        UPDATE local_assets
+        SET state = CASE WHEN sha256 IS NULL THEN 'DISCOVERED' ELSE 'HASHED' END,
+            remoteId = NULL,
+            attemptCount = 0,
+            lastError = NULL
+        WHERE state NOT IN ('LOCAL_FREED', 'SKIPPED')
+        """,
+    )
+    suspend fun forgetServerState(): Int
 }

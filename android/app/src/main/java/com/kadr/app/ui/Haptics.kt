@@ -1,5 +1,6 @@
 package com.kadr.app.ui
 
+import android.os.Build
 import android.provider.Settings
 import android.view.HapticFeedbackConstants
 import android.view.View
@@ -23,11 +24,26 @@ class Haptics(private val view: View) {
     /** A selection landing, or a long-press taking hold. */
     fun select() = view.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
 
-    /** Something finished well — a batch draining, a restore landing. */
-    fun confirm() = view.performHapticFeedback(HapticFeedbackConstants.CONFIRM)
+    /**
+     * Something finished well — a batch draining, a restore landing.
+     *
+     * CONFIRM and REJECT only exist from API 30. Below that the platform does
+     * not fall back to anything: it looks the constant up, fails to find it and
+     * silently does nothing, so a phone on API 26–29 would get no buzz at all
+     * where §12 asks for one. Hence the explicit older constant.
+     */
+    fun confirm() = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+        view.performHapticFeedback(HapticFeedbackConstants.CONFIRM)
+    } else {
+        view.performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY)
+    }
 
     /** A refusal: nothing to do, or an action that cannot proceed. */
-    fun reject() = view.performHapticFeedback(HapticFeedbackConstants.REJECT)
+    fun reject() = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+        view.performHapticFeedback(HapticFeedbackConstants.REJECT)
+    } else {
+        view.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
+    }
 
     /** A light tick as a value passes a step. */
     fun tick() = view.performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK)

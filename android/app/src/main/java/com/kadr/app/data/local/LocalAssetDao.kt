@@ -108,6 +108,27 @@ interface LocalAssetDao {
     @Query("UPDATE local_assets SET attemptCount = 0, lastError = NULL WHERE state = 'FAILED'")
     suspend fun resetFailures(): Int
 
+    /**
+     * Brings rows parked by a §10.5 rule back into the queue.
+     *
+     * SKIPPED is deliberately not a pending state, which means nothing in the
+     * backup loop ever moves a row out of it: a video parked while "include
+     * videos" was off would stay parked after it was turned back on, until the
+     * file itself changed on disk. The hash is kept, so returning costs a
+     * batched check rather than a re-read, and the next run re-applies the rules
+     * and re-parks anything still ineligible.
+     */
+    @Query(
+        """
+        UPDATE local_assets
+        SET state = CASE WHEN sha256 IS NULL THEN 'DISCOVERED' ELSE 'HASHED' END,
+            attemptCount = 0,
+            lastError = NULL
+        WHERE state = 'SKIPPED'
+        """,
+    )
+    suspend fun requeueSkipped(): Int
+
     @Query("SELECT COUNT(*) FROM local_assets WHERE state = 'FAILED' AND attemptCount >= :maxAttempts")
     suspend fun exhaustedCount(maxAttempts: Int): Int
 
