@@ -14,7 +14,6 @@
  * Passwords are read from the terminal, not from an argument — an argument
  * ends up in shell history and in `ps` output for every user on the machine.
  */
-import readline from 'node:readline'
 import { openDb } from './db.js'
 import { createUser, listUsers, setPassword } from './users.js'
 
@@ -136,7 +135,7 @@ async function readPasswordTwice() {
 }
 
 /**
- * Piped input is drained once and served line by line. A fresh readline per
+ * Piped input is drained once and served line by line. Reading it fresh per
  * prompt does not work: stdin is a single stream, so the second reader finds it
  * already at the end and hands back nothing.
  */
@@ -152,34 +151,49 @@ async function readPipedLine() {
 /**
  * Reads a line without echoing it. When stdin is not a terminal the value comes
  * from the pipe — scripted setup works, it just cannot be masked.
+ *
+ * Raw mode rather than readline: readline echoes each character itself, so
+ * masking on top of it is a race between its write and ours. Typed slowly it
+ * looked hidden; typed at speed, or pasted, characters survived on screen. A
+ * prompt that sometimes shows the password is worse than one that never
+ * claimed to hide it.
+ *
+ * In raw mode nothing is echoed at all, so there is nothing to erase.
  */
 function readHidden(prompt) {
   if (!process.stdin.isTTY) return readPipedLine()
 
-  return new Promise((resolve, reject) => {
-    const rl = readline.createInterface({ input: process.stdin, output: process.stdout })
-    const eraseLine = `${String.fromCharCode(27)}[2K\r`
+  return new Promise((resolve) => {
+    const stdin = process.stdin
+    let value = ''
 
-    const repaint = (chunk) => {
-      const value = String(chunk)
-      if (value !== '\n' && value !== '\r' && value !== '') {
-        process.stdout.write(eraseLine + prompt)
+    const finish = (result, exitCode) => {
+      stdin.setRawMode(false)
+      stdin.pause()
+      stdin.removeListener('data', onData)
+      process.stdout.write('\n')
+      if (exitCode !== undefined) process.exit(exitCode)
+      resolve(result)
+    }
+
+    const onData = (chunk) => {
+      // A paste arrives as a single chunk, so every character has to be walked.
+      for (const ch of String(chunk)) {
+        if (ch === '\r' || ch === '\n' || ch === '\u0004') return finish(value)
+        if (ch === '\u0003') return finish('', 130) // Ctrl-C
+        if (ch === '\u007f' || ch === '\b') {
+          value = value.slice(0, -1)
+        } else if (ch >= ' ') {
+          value += ch
+        }
       }
     }
 
     process.stdout.write(prompt)
-    process.stdin.on('data', repaint)
-
-    rl.once('line', (line) => {
-      process.stdin.removeListener('data', repaint)
-      rl.close()
-      process.stdout.write('\n')
-      resolve(line)
-    })
-    rl.once('error', (error) => {
-      process.stdin.removeListener('data', repaint)
-      reject(error)
-    })
+    stdin.setRawMode(true)
+    stdin.resume()
+    stdin.setEncoding('utf8')
+    stdin.on('data', onData)
   })
 }
 
